@@ -28,11 +28,12 @@ import com.google.crypto.tink.subtle.EllipticCurves;
 import com.google.crypto.tink.subtle.EllipticCurves.EcdsaEncoding;
 import com.google.crypto.tink.subtle.Enums.HashType;
 import com.google.crypto.tink.util.KeysDownloader;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import java.net.URI;
 import java.nio.charset.Charset;
 import java.security.GeneralSecurityException;
 import java.util.Arrays;
-import org.json.JSONObject;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -44,15 +45,11 @@ public class RewardedAdsVerifierTest {
 
   /** Sample Google provided JSON with its public signing keys. */
   private static final String GOOGLE_VERIFYING_PUBLIC_KEYS_JSON =
-      "{\n"
-          + "  \"keys\": [\n"
-          + "    {\n"
-          + "      \"base64\": \"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEPYnHwS8uegWAewQtlxizmLFynw"
-          + "HcxRT1PK07cDA6/C4sXrVI1SzZCUx8U8S0LjMrT6ird/VW7be3Mz6t/srtRQ==\",\n"
-          + "      \"keyId\": 1234\n"
-          + "    },\n"
-          + "  ],\n"
-          + "}";
+      "{\"keys\":[{"
+          + "\"keyId\":1234,"
+          + "\"base64\":\"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEPYnHwS8uegWAewQt"
+          + "lxizmLFynwHcxRT1PK07cDA6/C4sXrVI1SzZCUx8U8S0LjMrT6ird/VW7be3Mz6t/srtRQ==\""
+          + "}]}";
 
   /**
    * Sample Google private signing key.
@@ -107,11 +104,10 @@ public class RewardedAdsVerifierTest {
   @Test
   public void testShouldVerifyIfKeyIdIsLargerThanMaxInt() throws Exception {
     long keyId = Integer.MAX_VALUE + 1;
-    JSONObject trustedKeysJson = new JSONObject(GOOGLE_VERIFYING_PUBLIC_KEYS_JSON);
-    trustedKeysJson
-        .getJSONArray("keys")
-        .getJSONObject(0)
-        .put("keyId", keyId);
+    JsonObject trustedKeysJson =
+        JsonParser.parseString(GOOGLE_VERIFYING_PUBLIC_KEYS_JSON).getAsJsonObject();
+
+    trustedKeysJson.getAsJsonArray("keys").get(0).getAsJsonObject().addProperty("keyId", keyId);
     RewardedAdsVerifier verifier =
         new RewardedAdsVerifier.Builder()
             .setVerifyingPublicKeys(trustedKeysJson.toString())
@@ -159,11 +155,13 @@ public class RewardedAdsVerifierTest {
 
   @Test
   public void testShouldFailIfVerifyingWithDifferentKey() throws Exception {
-    JSONObject trustedKeysJson = new JSONObject(GOOGLE_VERIFYING_PUBLIC_KEYS_JSON);
+    JsonObject trustedKeysJson =
+        JsonParser.parseString(GOOGLE_VERIFYING_PUBLIC_KEYS_JSON).getAsJsonObject();
     trustedKeysJson
-        .getJSONArray("keys")
-        .getJSONObject(0)
-        .put("base64", ALTERNATE_PUBLIC_SIGNING_KEY);
+        .getAsJsonArray("keys")
+        .get(0)
+        .getAsJsonObject()
+        .addProperty("base64", ALTERNATE_PUBLIC_SIGNING_KEY);
 
     RewardedAdsVerifier verifier =
         new RewardedAdsVerifier.Builder()
@@ -249,7 +247,7 @@ public class RewardedAdsVerifierTest {
     try {
       verifier.verify(REWARD_URL);
     } catch (GeneralSecurityException e) {
-      assertEquals("needs a signature query parameter", e.getMessage());
+      assertEquals("signature and key id must be the last two query parameters", e.getMessage());
     }
   }
 
@@ -267,7 +265,107 @@ public class RewardedAdsVerifierTest {
               .append("foo")
               .toString());
     } catch (GeneralSecurityException e) {
-      assertEquals("needs a key_id query parameter", e.getMessage());
+      assertEquals("signature and key id must be the last two query parameters", e.getMessage());
+    }
+  }
+
+  @Test
+  public void testShouldFailWithSignatureAndKeyIdNotTheLastParameters() throws Exception {
+    RewardedAdsVerifier verifier =
+        new RewardedAdsVerifier.Builder()
+            .setVerifyingPublicKeys(GOOGLE_VERIFYING_PUBLIC_KEYS_JSON)
+            .build();
+    try {
+      verifier.verify(
+          new StringBuilder(REWARD_HOST_AND_PATH)
+              .append(RewardedAdsVerifier.SIGNATURE_PARAM_NAME)
+              .toString());
+    } catch (GeneralSecurityException e) {
+      assertEquals("signature and key id must be the last two query parameters", e.getMessage());
+    }
+  }
+
+  @Test
+  public void testShouldFailWithSignatureAndKeyIdNotTheLastParameters2() throws Exception {
+    RewardedAdsVerifier verifier =
+        new RewardedAdsVerifier.Builder()
+            .setVerifyingPublicKeys(GOOGLE_VERIFYING_PUBLIC_KEYS_JSON)
+            .build();
+    try {
+      verifier.verify(
+          new StringBuilder(REWARD_HOST_AND_PATH)
+              .append(RewardedAdsVerifier.SIGNATURE_PARAM_NAME)
+              .append("foo")
+              .append("&")
+              .append(RewardedAdsVerifier.KEY_ID_PARAM_NAME)
+              .append("123")
+              .append("bar=baz")
+              .toString());
+    } catch (GeneralSecurityException e) {
+      assertEquals("signature and key id must be the last two query parameters", e.getMessage());
+    }
+  }
+
+  @Test
+  public void testShouldFailWithSignatureAndKeyIdNotTheLastParameters3() throws Exception {
+    RewardedAdsVerifier verifier =
+        new RewardedAdsVerifier.Builder()
+            .setVerifyingPublicKeys(GOOGLE_VERIFYING_PUBLIC_KEYS_JSON)
+            .build();
+    try {
+      verifier.verify(
+          new StringBuilder(REWARD_URL)
+              .append("&")
+              .append(RewardedAdsVerifier.SIGNATURE_PARAM_NAME)
+              .append("foo")
+              .append("&")
+              .append(RewardedAdsVerifier.KEY_ID_PARAM_NAME)
+              .append("123")
+              .append("&bar=baz") // this would be interpreted as part of the key ID
+              .toString());
+    } catch (GeneralSecurityException e) {
+      assertEquals("key_id must be a long", e.getMessage());
+    }
+  }
+
+  @Test
+  public void testShouldFailWithSignatureAndKeyIdNoAmpersand() throws Exception {
+    RewardedAdsVerifier verifier =
+        new RewardedAdsVerifier.Builder()
+            .setVerifyingPublicKeys(GOOGLE_VERIFYING_PUBLIC_KEYS_JSON)
+            .build();
+    try {
+      verifier.verify(
+          new StringBuilder(REWARD_URL)
+              .append("&")
+              .append(RewardedAdsVerifier.SIGNATURE_PARAM_NAME)
+              .append("foo")
+              .append(RewardedAdsVerifier.KEY_ID_PARAM_NAME)
+              .append("123")
+              .toString());
+    } catch (GeneralSecurityException e) {
+      assertEquals("signature and key id must be the last two query parameters", e.getMessage());
+    }
+  }
+
+  @Test
+  public void testShouldFailWithKeyIdNotLong() throws Exception {
+    RewardedAdsVerifier verifier =
+        new RewardedAdsVerifier.Builder()
+            .setVerifyingPublicKeys(GOOGLE_VERIFYING_PUBLIC_KEYS_JSON)
+            .build();
+    try {
+      verifier.verify(
+          new StringBuilder(REWARD_URL)
+              .append("&")
+              .append(RewardedAdsVerifier.SIGNATURE_PARAM_NAME)
+              .append("foo")
+              .append("&")
+              .append(RewardedAdsVerifier.KEY_ID_PARAM_NAME)
+              .append("not_long")
+              .toString());
+    } catch (GeneralSecurityException e) {
+      assertEquals("key_id must be a long", e.getMessage());
     }
   }
 }

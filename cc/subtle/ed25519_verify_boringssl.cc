@@ -32,6 +32,9 @@ namespace subtle {
 // static
 util::StatusOr<std::unique_ptr<PublicKeyVerify>> Ed25519VerifyBoringSsl::New(
     absl::string_view public_key) {
+  auto status = internal::CheckFipsCompatibility<Ed25519VerifyBoringSsl>();
+  if (!status.ok()) return status;
+
   if (public_key.length() != ED25519_PUBLIC_KEY_LEN) {
     return util::Status(
         util::error::INVALID_ARGUMENT,
@@ -43,9 +46,6 @@ util::StatusOr<std::unique_ptr<PublicKeyVerify>> Ed25519VerifyBoringSsl::New(
       new Ed25519VerifyBoringSsl(public_key));
   return std::move(verify);
 }
-
-Ed25519VerifyBoringSsl::Ed25519VerifyBoringSsl(absl::string_view public_key)
-    : public_key_(public_key) {}
 
 util::Status Ed25519VerifyBoringSsl::Verify(absl::string_view signature,
                                             absl::string_view data) const {

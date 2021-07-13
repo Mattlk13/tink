@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -18,9 +20,9 @@ import (
 	"fmt"
 
 	"github.com/google/tink/go/core/cryptofmt"
-	"github.com/google/tink/go/keyset"
 	"github.com/google/tink/go/core/primitiveset"
 	"github.com/google/tink/go/core/registry"
+	"github.com/google/tink/go/keyset"
 	"github.com/google/tink/go/tink"
 )
 
@@ -30,45 +32,59 @@ func New(h *keyset.Handle) (tink.DeterministicAEAD, error) {
 }
 
 // NewWithKeyManager returns a DeterministicAEAD primitive from the given keyset handle and custom key manager.
+// Deprecated: register the KeyManager and use New above.
 func NewWithKeyManager(h *keyset.Handle, km registry.KeyManager) (tink.DeterministicAEAD, error) {
 	ps, err := h.PrimitivesWithKeyManager(km)
 	if err != nil {
 		return nil, fmt.Errorf("daead_factory: cannot obtain primitive set: %s", err)
 	}
-	ret := new(primitiveSet)
+
+	if _, ok := (ps.Primary.Primitive).(tink.DeterministicAEAD); !ok {
+		return nil, fmt.Errorf("daead_factory: not a DeterministicAEAD primitive")
+	}
+
+	for _, primitives := range ps.Entries {
+		for _, p := range primitives {
+			if _, ok := (p.Primitive).(tink.DeterministicAEAD); !ok {
+				return nil, fmt.Errorf("daead_factory: not a DeterministicAEAD primitive")
+			}
+		}
+	}
+
+	ret := new(wrappedDeterministicAEAD)
 	ret.ps = ps
 	return tink.DeterministicAEAD(ret), nil
 }
 
-// primitiveSet is an DeterministicAEAD implementation that uses the underlying primitive set
+// wrappedDeterministicAEAD is an DeterministicAEAD implementation that uses an underlying primitive set
 // for deterministic encryption and decryption.
-type primitiveSet struct {
+type wrappedDeterministicAEAD struct {
 	ps *primitiveset.PrimitiveSet
 }
 
-// Asserts that primitiveSet implements the DeterministicAEAD interface.
-var _ tink.DeterministicAEAD = (*primitiveSet)(nil)
+// Asserts that wrappedDeterministicAEAD implements the DeterministicAEAD interface.
+var _ tink.DeterministicAEAD = (*wrappedDeterministicAEAD)(nil)
 
 // EncryptDeterministically deterministically encrypts plaintext with additionalData as additional authenticated data.
 // It returns the concatenation of the primary's identifier and the ciphertext.
-func (d *primitiveSet) EncryptDeterministically(pt, aad []byte) ([]byte, error) {
+func (d *wrappedDeterministicAEAD) EncryptDeterministically(pt, aad []byte) ([]byte, error) {
 	primary := d.ps.Primary
-	p := (primary.Primitive).(tink.DeterministicAEAD)
+	p, ok := (primary.Primitive).(tink.DeterministicAEAD)
+	if !ok {
+		return nil, fmt.Errorf("daead_factory: not a DeterministicAEAD primitive")
+	}
+
 	ct, err := p.EncryptDeterministically(pt, aad)
 	if err != nil {
 		return nil, err
 	}
-
-	ret := make([]byte, 0, len(primary.Prefix) + len(ct))
-	ret = append(ret, primary.Prefix...)
-	ret = append(ret, ct...)
-	return ret, nil
+	return append([]byte(primary.Prefix), ct...), nil
 }
 
 // DecryptDeterministically deterministically decrypts ciphertext with additionalData as
 // additional authenticated data. It returns the corresponding plaintext if the
 // ciphertext is authenticated.
-func (d *primitiveSet) DecryptDeterministically(ct, aad []byte) ([]byte, error) {
+func (d *wrappedDeterministicAEAD) DecryptDeterministically(ct, aad []byte) ([]byte, error) {
 	// try non-raw keys
 	prefixSize := cryptofmt.NonRawPrefixSize
 	if len(ct) > prefixSize {
@@ -77,7 +93,11 @@ func (d *primitiveSet) DecryptDeterministically(ct, aad []byte) ([]byte, error) 
 		entries, err := d.ps.EntriesForPrefix(string(prefix))
 		if err == nil {
 			for i := 0; i < len(entries); i++ {
-				p := (entries[i].Primitive).(tink.DeterministicAEAD)
+				p, ok := (entries[i].Primitive).(tink.DeterministicAEAD)
+				if !ok {
+					return nil, fmt.Errorf("daead_factory: not a DeterministicAEAD primitive")
+				}
+
 				pt, err := p.DecryptDeterministically(ctNoPrefix, aad)
 				if err == nil {
 					return pt, nil
@@ -85,17 +105,23 @@ func (d *primitiveSet) DecryptDeterministically(ct, aad []byte) ([]byte, error) 
 			}
 		}
 	}
+
 	// try raw keys
 	entries, err := d.ps.RawEntries()
 	if err == nil {
 		for i := 0; i < len(entries); i++ {
-			p := (entries[i].Primitive).(tink.DeterministicAEAD)
+			p, ok := (entries[i].Primitive).(tink.DeterministicAEAD)
+			if !ok {
+				return nil, fmt.Errorf("daead_factory: not a DeterministicAEAD primitive")
+			}
+
 			pt, err := p.DecryptDeterministically(ct, aad)
 			if err == nil {
 				return pt, nil
 			}
 		}
 	}
+
 	// nothing worked
 	return nil, fmt.Errorf("daead_factory: decryption failed")
 }

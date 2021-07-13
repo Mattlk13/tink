@@ -39,19 +39,20 @@ namespace test {
 // Various utilities for testing.
 ///////////////////////////////////////////////////////////////////////////////
 
-// Writes 'contents' the specified 'output_stream', and closes the stream.
+// Writes 'contents' the specified 'output_stream', and if 'close_stream'
+// is true, then closes the stream.
 // Returns the status of output_stream->Close()-operation, or a non-OK status
 // of a prior output_stream->Next()-operation, if any.
 util::Status WriteToStream(OutputStream* output_stream,
-                           absl::string_view contents);
+                           absl::string_view contents,
+                           bool close_stream = true);
 
 // Reads all bytes from the specified 'input_stream', and puts
 // them into 'output', where both 'input_stream' and 'output must be non-null.
 // Returns a non-OK status only if reading fails for some reason.
 // If the end of stream is reached ('input_stream' returns OUT_OF_RANGE),
 // then this function returns OK.
-util::Status ReadFromStream(InputStream* input_stream,
-                            std::string* output);
+util::Status ReadFromStream(InputStream* input_stream, std::string* output);
 
 // A dummy encrypter that "encrypts" by just appending to the plaintext
 // the current segment number and a marker byte indicating whether
@@ -59,11 +60,11 @@ util::Status ReadFromStream(InputStream* input_stream,
 class DummyStreamSegmentEncrypter : public StreamSegmentEncrypter {
  public:
   // Size of the per-segment tag added upon encryption.
-  static const int kSegmentTagSize = sizeof(int64_t) + 1;
+  static constexpr int kSegmentTagSize = sizeof(int64_t) + 1;
 
   // Bytes for marking whether a given segment is the last one.
-  static const char kLastSegment = 'l';
-  static const char kNotLastSegment = 'n';
+  static constexpr char kLastSegment = 'l';
+  static constexpr char kNotLastSegment = 'n';
 
   DummyStreamSegmentEncrypter(int pt_segment_size,
                               int header_size,

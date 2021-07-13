@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -14,10 +16,10 @@
 #ifndef TINK_MAC_AES_CMAC_KEY_MANAGER_H_
 #define TINK_MAC_AES_CMAC_KEY_MANAGER_H_
 
-#include <algorithm>
-#include <vector>
+#include <string>
 
-#include "absl/strings/string_view.h"
+#include "absl/memory/memory.h"
+#include "absl/strings/str_cat.h"
 #include "tink/core/key_type_manager.h"
 #include "tink/key_manager.h"
 #include "tink/mac.h"
@@ -26,6 +28,7 @@
 #include "tink/util/constants.h"
 #include "tink/util/errors.h"
 #include "tink/util/protobuf_helper.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
 #include "tink/util/validation.h"
@@ -43,8 +46,9 @@ class AesCmacKeyManager
   class MacFactory : public PrimitiveFactory<Mac> {
     crypto::tink::util::StatusOr<std::unique_ptr<Mac>> Create(
         const google::crypto::tink::AesCmacKey& key) const override {
-      return subtle::AesCmacBoringSsl::New(key.key_value(),
-                                           key.params().tag_size());
+      return subtle::AesCmacBoringSsl::New(
+          util::SecretDataFromStringView(key.key_value()),
+          key.params().tag_size());
     }
   };
 

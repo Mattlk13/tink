@@ -16,10 +16,10 @@
 #ifndef TINK_AEAD_AES_CTR_HMAC_AEAD_KEY_MANAGER_H_
 #define TINK_AEAD_AES_CTR_HMAC_AEAD_KEY_MANAGER_H_
 
-#include <algorithm>
-#include <vector>
+#include <string>
 
-#include "absl/strings/string_view.h"
+#include "absl/memory/memory.h"
+#include "absl/strings/str_cat.h"
 #include "tink/aead.h"
 #include "tink/core/key_type_manager.h"
 #include "tink/key_manager.h"
@@ -64,6 +64,10 @@ class AesCtrHmacAeadKeyManager
   crypto::tink::util::StatusOr<google::crypto::tink::AesCtrHmacAeadKey>
   CreateKey(const google::crypto::tink::AesCtrHmacAeadKeyFormat& key_format)
       const override;
+
+  internal::FipsCompatibility FipsStatus() const override {
+    return internal::FipsCompatibility::kRequiresBoringCrypto;
+  }
 
  private:
   const std::string key_type_ =

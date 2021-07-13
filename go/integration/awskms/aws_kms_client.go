@@ -28,6 +28,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kms"
+	"github.com/aws/aws-sdk-go/service/kms/kmsiface"
 	"github.com/google/tink/go/core/registry"
 	"github.com/google/tink/go/tink"
 )
@@ -37,113 +38,102 @@ const (
 )
 
 var (
-	errCred = errors.New("invalid credential path")
+	errCred    = errors.New("invalid credential path")
+	errBadFile = errors.New("cannot open credential path")
+	errCredCSV = errors.New("malformed credential csv file")
 )
 
-// AWSClient represents a client that connects to the AWS KMS backend.
-type AWSClient struct {
-	keyURI string
-	kms    *kms.KMS
-	region string
+// awsClient represents a client that connects to the AWS KMS backend.
+type awsClient struct {
+	keyURIPrefix string
+	kms          kmsiface.KMSAPI
 }
 
-var _ registry.KMSClient = (*AWSClient)(nil)
-
-// NewAWSClient returns a new client to AWS KMS. It does not have an established session.
-func NewAWSClient(URI string) (*AWSClient, error) {
-	if !strings.HasPrefix(strings.ToLower(URI), awsPrefix) {
-		return nil, fmt.Errorf("key URI must start with %s", awsPrefix)
-	}
-	r, err := getRegion(URI)
+// NewClient returns a new AWS KMS client which will use default
+// credentials to handle keys with uriPrefix prefix.
+// uriPrefix must have the following format: 'aws-kms://arn:<partition>:kms:<region>:[:path]'.
+// See http://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html.
+func NewClient(uriPrefix string) (registry.KMSClient, error) {
+	r, err := getRegion(uriPrefix)
 	if err != nil {
 		return nil, err
 	}
-	return &AWSClient{
-		keyURI: URI,
-		region: r,
-	}, nil
 
+	session := session.Must(session.NewSession(&aws.Config{
+		Region: aws.String(r),
+	}))
+
+	return NewClientWithKMS(uriPrefix, kms.New(session))
 }
 
-// Supported true if this client does support keyURI
-func (g *AWSClient) Supported(keyURI string) bool {
-	if (len(g.keyURI) > 0) && (strings.Compare(strings.ToLower(g.keyURI), strings.ToLower(keyURI)) == 0) {
-		return true
+// NewClientWithCredentials returns a new AWS KMS client which will use given
+// credentials to handle keys with uriPrefix prefix.
+// uriPrefix must have the following format: 'aws-kms://arn:<partition>:kms:<region>:[:path]'.
+// See http://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html.
+func NewClientWithCredentials(uriPrefix string, credentialPath string) (registry.KMSClient, error) {
+	r, err := getRegion(uriPrefix)
+	if err != nil {
+		return nil, err
 	}
-	return ((len(g.keyURI) == 0) && (strings.HasPrefix(strings.ToLower(keyURI), awsPrefix)))
-}
 
-// LoadCredentials loads the credentials in credentialPath. If credentialPath is  null, loads the
-// default credentials.
-func (g *AWSClient) LoadCredentials(credentialPath string) (*AWSClient, error) {
 	var creds *credentials.Credentials
-	if len(credentialPath) <= 0 {
+	if len(credentialPath) == 0 {
 		return nil, errCred
 	}
 	c, err := extractCredsCSV(credentialPath)
-	if err != nil {
-		creds = credentials.NewSharedCredentials(credentialPath, "default")
-	} else {
+	switch err {
+	case nil:
 		creds = credentials.NewStaticCredentialsFromCreds(*c)
+	case errBadFile, errCredCSV:
+		return nil, err
+	default:
+		// fallback to load the credential path as .ini shared credentials.
+		creds = credentials.NewSharedCredentials(credentialPath, "default")
 	}
 	session := session.Must(session.NewSession(&aws.Config{
 		Credentials: creds,
-		Region:      aws.String(g.region),
+		Region:      aws.String(r),
 	}))
 
-	g.kms = kms.New(session)
-	return g, nil
+	return NewClientWithKMS(uriPrefix, kms.New(session))
 }
 
-// LoadDefaultCredentials loads with the default credentials.
-func (g *AWSClient) LoadDefaultCredentials() (*AWSClient, error) {
-	session := session.Must(session.NewSession(&aws.Config{
-		Region: aws.String(g.region),
-	}))
-	g.kms = kms.New(session)
-	return g, nil
+// NewClientWithKMS returns a new AWS KMS client with user created KMS client.
+// Client is responsible for keeping the region consistency between key URI and KMS client.
+// uriPrefix must have the following format: 'aws-kms://arn:<partition>:kms:<region>:[:path]'.
+// See http://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html.
+func NewClientWithKMS(uriPrefix string, kms kmsiface.KMSAPI) (registry.KMSClient, error) {
+	if !strings.HasPrefix(strings.ToLower(uriPrefix), awsPrefix) {
+		return nil, fmt.Errorf("uriPrefix must start with %s, but got %s", awsPrefix, uriPrefix)
+	}
+
+	return &awsClient{
+		keyURIPrefix: uriPrefix,
+		kms:          kms,
+	}, nil
 }
 
-// WithCredentials retrieves credentials using a provider.
-func (g *AWSClient) WithCredentials(p *credentials.Credentials) (*AWSClient, error) {
-	session := session.Must(session.NewSession(&aws.Config{
-		Region:      aws.String(g.region),
-		Credentials: p,
-	}))
-	g.kms = kms.New(session)
-	return g, nil
+// Supported true if this client does support keyURI
+func (c *awsClient) Supported(keyURI string) bool {
+	return strings.HasPrefix(keyURI, c.keyURIPrefix)
 }
 
 // GetAEAD gets an AEAD backend by keyURI.
-func (g *AWSClient) GetAEAD(keyURI string) (tink.AEAD, error) {
-	if len(g.keyURI) > 0 && strings.Compare(strings.ToLower(g.keyURI), strings.ToLower(keyURI)) != 0 {
-		return nil, fmt.Errorf("this client is bound to %s, cannot load keys bound to %s", g.keyURI, keyURI)
+// keyURI must have the following format: 'aws-kms://arn:<partition>:kms:<region>:[:path]'.
+// See http://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html.
+func (c *awsClient) GetAEAD(keyURI string) (tink.AEAD, error) {
+	if !c.Supported(keyURI) {
+		return nil, fmt.Errorf("keyURI must start with prefix %s, but got %s", c.keyURIPrefix, keyURI)
 	}
-	uri, err := validateTrimKMSPrefix(g.keyURI, awsPrefix)
-	if err != nil {
-		return nil, err
-	}
-	return NewAWSAEAD(uri, g.kms), nil
-}
 
-func validateKMSPrefix(keyURI, prefix string) bool {
-	if len(keyURI) > 0 && strings.HasPrefix(strings.ToLower(keyURI), awsPrefix) {
-		return true
-	}
-	return false
-}
-
-func validateTrimKMSPrefix(keyURI, prefix string) (string, error) {
-	if !validateKMSPrefix(keyURI, prefix) {
-		return "", fmt.Errorf("key URI must start with %s", prefix)
-	}
-	return strings.TrimPrefix(keyURI, prefix), nil
+	uri := strings.TrimPrefix(keyURI, awsPrefix)
+	return newAWSAEAD(uri, c.kms), nil
 }
 
 func extractCredsCSV(file string) (*credentials.Value, error) {
 	f, err := os.Open(file)
 	if err != nil {
-		return nil, err
+		return nil, errBadFile
 	}
 	defer f.Close()
 
@@ -151,24 +141,43 @@ func extractCredsCSV(file string) (*credentials.Value, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(lines) < 2 {
-		return nil, errors.New("invalid csv file")
+
+	// It is possible that the file is an AWS .ini credential file, and it can be
+	// parsed as 1-column CSV file as well. A real AWS credentials.csv is never 1 column.
+	if len(lines) > 0 && len(lines[0]) == 1 {
+		return nil, errors.New("not a valid CSV credential file")
 	}
+
+	// credentials.csv can be obtained when a AWS IAM user is created through IAM console.
+	// The first line of the csv file is "User name,Password,Access key ID,Secret access key,Console login link"
+	// The 2nd line of it contains 5 comma separated values.
+	// Parse the file with a strict format assumption as follows:
+	// 1. There must be at least 4 columns and 2 rows.
+	// 2. The access key id and the secret access key must be on (0-based) column 2 and 3.
+	if len(lines) < 2 {
+		return nil, errCredCSV
+	}
+
+	if len(lines[1]) < 4 {
+		return nil, errCredCSV
+	}
+
 	return &credentials.Value{
 		AccessKeyID:     lines[1][2],
 		SecretAccessKey: lines[1][3],
 	}, nil
-
 }
 
 func getRegion(keyURI string) (string, error) {
-	re1, err := regexp.Compile(`aws-kms://arn:aws:kms:([a-z0-9-]+):`)
+	// keyURI must have the following format: 'aws-kms://arn:<partition>:kms:<region>:[:path]'.
+	// See http://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html.
+	re1, err := regexp.Compile(`aws-kms://arn:(aws[a-zA-Z0-9-_]*):kms:([a-z0-9-]+):`)
 	if err != nil {
 		return "", err
 	}
 	r := re1.FindStringSubmatch(keyURI)
-	if len(r) != 2 {
+	if len(r) != 3 {
 		return "", errors.New("extracting region from URI failed")
 	}
-	return r[1], nil
+	return r[2], nil
 }

@@ -27,7 +27,7 @@ const char DummyStreamSegmentEncrypter::kLastSegment;
 const char DummyStreamSegmentEncrypter::kNotLastSegment;
 
 util::Status WriteToStream(OutputStream* output_stream,
-                           absl::string_view contents) {
+                           absl::string_view contents, bool close_stream) {
   void* buffer;
   int pos = 0;
   int remaining = contents.length();
@@ -45,7 +45,7 @@ util::Status WriteToStream(OutputStream* output_stream,
   if (available_space > available_bytes) {
     output_stream->BackUp(available_space - available_bytes);
   }
-  return output_stream->Close();
+  return close_stream ? output_stream->Close() : util::Status::OK;
 }
 
 util::Status ReadFromStream(InputStream* input_stream, std::string* output) {
@@ -63,7 +63,8 @@ util::Status ReadFromStream(InputStream* input_stream, std::string* output) {
     if (!next_result.ok()) return next_result.status();
     auto read_bytes = next_result.ValueOrDie();
     if (read_bytes > 0) {
-      output->append(std::string(reinterpret_cast<const char*>(buffer), read_bytes));
+      output->append(
+          std::string(reinterpret_cast<const char*>(buffer), read_bytes));
     }
   }
   return util::Status::OK;

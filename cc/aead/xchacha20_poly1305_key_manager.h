@@ -16,17 +16,19 @@
 #ifndef TINK_AEAD_XCHACHA20_POLY1305_KEY_MANAGER_H_
 #define TINK_AEAD_XCHACHA20_POLY1305_KEY_MANAGER_H_
 
-#include <algorithm>
-#include <vector>
+#include <string>
 
-#include "absl/strings/string_view.h"
+#include "absl/memory/memory.h"
+#include "absl/strings/str_cat.h"
 #include "tink/aead.h"
 #include "tink/core/key_type_manager.h"
 #include "tink/subtle/random.h"
 #include "tink/subtle/xchacha20_poly1305_boringssl.h"
 #include "tink/util/constants.h"
 #include "tink/util/errors.h"
+#include "tink/util/input_stream_util.h"
 #include "tink/util/protobuf_helper.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
 #include "tink/util/validation.h"
@@ -43,7 +45,8 @@ class XChaCha20Poly1305KeyManager
   class AeadFactory : public PrimitiveFactory<Aead> {
     crypto::tink::util::StatusOr<std::unique_ptr<Aead>> Create(
         const google::crypto::tink::XChaCha20Poly1305Key& key) const override {
-      return subtle::XChacha20Poly1305BoringSsl::New(key.key_value());
+      return subtle::XChacha20Poly1305BoringSsl::New(
+          util::SecretDataFromStringView(key.key_value()));
     }
   };
 
@@ -87,6 +90,29 @@ class XChaCha20Poly1305KeyManager
     result.set_version(get_version());
     result.set_key_value(subtle::Random::GetRandomBytes(kKeySizeInBytes));
     return result;
+  }
+
+  crypto::tink::util::StatusOr<google::crypto::tink::XChaCha20Poly1305Key>
+  DeriveKey(const google::crypto::tink::XChaCha20Poly1305KeyFormat& key_format,
+            InputStream* input_stream) const override {
+    crypto::tink::util::Status status =
+        ValidateVersion(key_format.version(), get_version());
+    if (!status.ok()) return status;
+
+    crypto::tink::util::StatusOr<std::string> randomness =
+        ReadBytesFromStream(kKeySizeInBytes, input_stream);
+    if (!randomness.ok()) {
+      if (randomness.status().error_code() == util::error::OUT_OF_RANGE) {
+        return crypto::tink::util::Status(
+            crypto::tink::util::error::INVALID_ARGUMENT,
+            "Could not get enough pseudorandomness from input stream");
+      }
+      return randomness.status();
+    }
+    google::crypto::tink::XChaCha20Poly1305Key key;
+    key.set_version(get_version());
+    key.set_key_value(randomness.ValueOrDie());
+    return key;
   }
 
  private:

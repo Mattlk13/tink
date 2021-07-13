@@ -1,4 +1,7 @@
-package(default_visibility = ["//tools/testing:__subpackages__"])
+package(
+    default_testonly = 1,
+    default_visibility = ["//:__subpackages__"],
+)
 
 licenses(["notice"])
 
@@ -6,17 +9,20 @@ cc_library(
     name = "cli_util",
     srcs = ["cli_util.cc"],
     hdrs = ["cli_util.h"],
+    data = ["@tink_base//testdata:credentials"],
     deps = [
-        "//cc",
-        "//cc:binary_keyset_reader",
-        "//cc:cleartext_keyset_handle",
-        "//cc:config",
-        "//cc:json_keyset_reader",
-        "//cc:json_keyset_writer",
-        "//cc/config:tink_config",
-        "//cc/util:status",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/strings",
+        "@tink_cc",
+        "@tink_cc//:binary_keyset_reader",
+        "@tink_cc//:cleartext_keyset_handle",
+        "@tink_cc//:json_keyset_reader",
+        "@tink_cc//:json_keyset_writer",
+        "@tink_cc//:kms_clients",
+        "@tink_cc//config:tink_config",
+        "@tink_cc//integration/awskms:aws_kms_client",
+        "@tink_cc//integration/gcpkms:gcp_kms_client",
+        "@tink_cc//util:status",
     ],
 )
 
@@ -25,11 +31,11 @@ cc_binary(
     srcs = ["aws_kms_aead_cli.cc"],
     deps = [
         ":cli_util",
-        "//cc",
-        "//cc/integration/awskms:aws_crypto",
-        "//cc/integration/awskms:aws_kms_aead",
-        "//cc/integration/awskms:aws_kms_client",
         "@aws_cpp_sdk//:aws_sdk_core",
+        "@tink_cc",
+        "@tink_cc//integration/awskms:aws_crypto",
+        "@tink_cc//integration/awskms:aws_kms_aead",
+        "@tink_cc//integration/awskms:aws_kms_client",
     ],
 )
 
@@ -38,9 +44,9 @@ cc_binary(
     srcs = ["gcp_kms_aead_cli.cc"],
     deps = [
         ":cli_util",
-        "//cc",
-        "//cc/integration/gcpkms:gcp_kms_aead",
-        "//cc/integration/gcpkms:gcp_kms_client",
+        "@tink_cc",
+        "@tink_cc//integration/gcpkms:gcp_kms_aead",
+        "@tink_cc//integration/gcpkms:gcp_kms_client",
     ],
 )
 
@@ -49,7 +55,7 @@ cc_binary(
     srcs = ["keyset_reader_writer_cli.cc"],
     deps = [
         ":cli_util",
-        "//cc",
+        "@tink_cc",
     ],
 )
 
@@ -57,7 +63,7 @@ cc_binary(
     name = "version_cli_cc",
     srcs = ["version_cli.cc"],
     deps = [
-        "//cc",
+        "@tink_cc",
     ],
 )
 
@@ -66,7 +72,7 @@ cc_binary(
     srcs = ["aead_cli.cc"],
     deps = [
         ":cli_util",
-        "//cc",
+        "@tink_cc",
     ],
 )
 
@@ -75,7 +81,7 @@ cc_binary(
     srcs = ["deterministic_aead_cli.cc"],
     deps = [
         ":cli_util",
-        "//cc",
+        "@tink_cc",
     ],
 )
 
@@ -84,10 +90,10 @@ cc_binary(
     srcs = ["streaming_aead_cli.cc"],
     deps = [
         ":cli_util",
-        "//cc",
-        "//cc/util:istream_input_stream",
-        "//cc/util:ostream_output_stream",
-        "//cc/util:status",
+        "@tink_cc",
+        "@tink_cc//util:istream_input_stream",
+        "@tink_cc//util:ostream_output_stream",
+        "@tink_cc//util:status",
     ],
 )
 
@@ -96,7 +102,19 @@ cc_binary(
     srcs = ["mac_cli.cc"],
     deps = [
         ":cli_util",
-        "//cc",
+        "@tink_cc",
+    ],
+)
+
+cc_binary(
+    name = "prf_set_cli_cc",
+    srcs = ["prf_set_cli.cc"],
+    deps = [
+        ":cli_util",
+        "@com_google_absl//absl/strings",
+        "@tink_cc",
+        "@tink_cc//prf:prf_set",
+        "@tink_cc//util:status",
     ],
 )
 
@@ -105,7 +123,7 @@ cc_binary(
     srcs = ["hybrid_encrypt_cli.cc"],
     deps = [
         ":cli_util",
-        "//cc",
+        "@tink_cc",
     ],
 )
 
@@ -114,7 +132,7 @@ cc_binary(
     srcs = ["hybrid_decrypt_cli.cc"],
     deps = [
         ":cli_util",
-        "//cc",
+        "@tink_cc",
     ],
 )
 
@@ -123,7 +141,7 @@ cc_binary(
     srcs = ["public_key_sign_cli.cc"],
     deps = [
         ":cli_util",
-        "//cc",
+        "@tink_cc",
     ],
 )
 
@@ -132,7 +150,7 @@ cc_binary(
     srcs = ["public_key_verify_cli.cc"],
     deps = [
         ":cli_util",
-        "//cc",
+        "@tink_cc",
     ],
 )
 
@@ -144,22 +162,23 @@ sh_test(
     ],
     data = [
         ":aws_kms_aead_cli",
-        "//testdata:credentials",
-        "//tools/testing/cross_language:test_lib",
+        "//testing/cross_language:test_lib",
+        "@tink_base//testdata:credentials",
     ],
     tags = ["no_rbe"],
 )
 
-# TODO(b/119547792): Temporarily disabling until reliability concerns are addressed.
-#sh_test(
-#    name = "gcp_kms_aead_test",
-#    size = "medium",
-#    srcs = [
-#        "gcp_kms_aead_test.sh",
-#    ],
-#    data = [
-#        ":gcp_kms_aead_cli",
-#        "//testdata:credentials",
-#        "//tools/testing/cross_language:test_lib",
-#    ],
-#)
+sh_test(
+    name = "gcp_kms_aead_test",
+    size = "medium",
+    srcs = [
+        "gcp_kms_aead_test.sh",
+    ],
+    data = [
+        ":gcp_kms_aead_cli",
+        "//testing/cross_language:test_lib",
+        "@google_root_pem//file",
+        "@tink_base//testdata:credentials",
+    ],
+    tags = ["no_rbe"],
+)

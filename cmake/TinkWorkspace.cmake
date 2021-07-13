@@ -1,3 +1,5 @@
+# Copyright 2019 Google LLC
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -44,8 +46,8 @@ http_archive(
 
 http_archive(
   NAME com_google_absl
-  URL https://github.com/abseil/abseil-cpp/archive/20190808.zip
-  SHA256 0b62fc2d00c2b2bc3761a892a17ac3b8af3578bd28535d90b4c914b0a7460d4e
+  URL https://github.com/abseil/abseil-cpp/archive/64461421222f8be8663c50e8e82c91c3f95a0d3c.zip
+  SHA256 41d725950d0d3ed4d00020881db84fdc79ac349d9b325ab010686c5a794a822e
 )
 
 http_archive(
@@ -61,8 +63,8 @@ add_directory_alias("${wycheproof_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/cc/w
 
 http_archive(
   NAME boringssl
-  URL https://github.com/google/boringssl/archive/18637c5f37b87e57ebde0c40fe19c1560ec88813.zip
-  SHA256 bd923e59fca0d2b50db09af441d11c844c5e882a54c68943b7fc39a8cb5dd211
+  URL https://github.com/google/boringssl/archive/7686eb8ac9bc60198cbc8354fcba7f54c02792ec.zip
+  SHA256 73a7bc71f95f3259ddedc6cb5ba45d02f2359c43e75af354928b0471a428bb84
   CMAKE_SUBDIR src
 )
 
@@ -88,7 +90,7 @@ set(protobuf_BUILD_EXAMPLES OFF CACHE BOOL "Tink dependency override" FORCE)
 
 http_archive(
   NAME com_google_protobuf
-  URL https://github.com/google/protobuf/archive/v3.7.0.zip
-  SHA256 b50be32ea806bdb948c22595ba0742c75dc2f8799865def414cf27ea5706f2b7
+  URL https://github.com/google/protobuf/archive/v3.14.0.zip
+  SHA256 bf0e5070b4b99240183b29df78155eee335885e53a8af8683964579c214ad301
   CMAKE_SUBDIR cmake
 )

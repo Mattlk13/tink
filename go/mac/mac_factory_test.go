@@ -1,3 +1,5 @@
+// Copyright 2018 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -19,13 +21,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/google/tink/go/core/cryptofmt"
+	"github.com/google/tink/go/keyset"
 	"github.com/google/tink/go/mac"
+	"github.com/google/tink/go/signature"
 	"github.com/google/tink/go/testkeyset"
 	"github.com/google/tink/go/testutil"
 	"github.com/google/tink/go/tink"
 
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	commonpb "github.com/google/tink/go/proto/common_go_proto"
+	hmacpb "github.com/google/tink/go/proto/hmac_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 func TestFactoryMultipleKeys(t *testing.T) {
@@ -111,6 +118,69 @@ func TestFactoryRawKey(t *testing.T) {
 	}
 }
 
+func TestFactoryLegacyKey(t *testing.T) {
+	tagSize := uint32(16)
+	keyset := testutil.NewTestHMACKeyset(tagSize, tinkpb.OutputPrefixType_LEGACY)
+	primaryKey := keyset.Key[0]
+	if primaryKey.OutputPrefixType != tinkpb.OutputPrefixType_LEGACY {
+		t.Errorf("expect a legacy key")
+	}
+	keysetHandle, err := testkeyset.NewHandle(keyset)
+	if err != nil {
+		t.Errorf("testkeyset.NewHandle failed: %s", err)
+	}
+	p, err := mac.New(keysetHandle)
+	if err != nil {
+		t.Errorf("mac.New failed: %s", err)
+	}
+	data := []byte("some data")
+	tag, err := p.ComputeMAC(data)
+	if err != nil {
+		t.Errorf("mac computation failed: %s", err)
+	}
+	if err = p.VerifyMAC(tag, data); err != nil {
+		t.Errorf("mac verification failed: %s", err)
+	}
+}
+
+func TestFactoryLegacyFixedKeyFixedTag(t *testing.T) {
+	tagSize := uint32(16)
+	params := testutil.NewHMACParams(commonpb.HashType_SHA256, tagSize)
+	keyValue := []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}
+	key := &hmacpb.HmacKey{
+		Version:  0,
+		Params:   params,
+		KeyValue: keyValue,
+	}
+	serializedKey, err := proto.Marshal(key)
+	if err != nil {
+		t.Errorf("failed serializing proto: %v", err)
+	}
+	keyData := &tinkpb.KeyData{
+		TypeUrl:         "type.googleapis.com/google.crypto.tink.HmacKey",
+		Value:           serializedKey,
+		KeyMaterialType: tinkpb.KeyData_SYMMETRIC,
+	}
+	keyset := testutil.NewTestKeyset(keyData, tinkpb.OutputPrefixType_LEGACY)
+	primaryKey := keyset.Key[0]
+	if primaryKey.OutputPrefixType != tinkpb.OutputPrefixType_LEGACY {
+		t.Errorf("expect a legacy key")
+	}
+	keysetHandle, err := testkeyset.NewHandle(keyset)
+	if err != nil {
+		t.Errorf("testkeyset.NewHandle failed: %s", err)
+	}
+	p, err := mac.New(keysetHandle)
+	if err != nil {
+		t.Errorf("mac.New failed: %s", err)
+	}
+	data := []byte("hello")
+	tag := []byte{0, 0, 0, 0, 42, 64, 150, 12, 207, 250, 175, 32, 216, 164, 77, 69, 28, 29, 204, 235, 75}
+	if err = p.VerifyMAC(tag, data); err != nil {
+		t.Errorf("compatibleTag verification failed: %s", err)
+	}
+}
+
 func verifyMacPrimitive(computePrimitive tink.MAC, verifyPrimitive tink.MAC,
 	expectedPrefix string, tagSize uint32) error {
 	data := []byte("hello")
@@ -147,4 +217,28 @@ func verifyMacPrimitive(computePrimitive tink.MAC, verifyPrimitive tink.MAC,
 		}
 	}
 	return nil
+}
+
+func TestFactoryWithInvalidPrimitiveSetType(t *testing.T) {
+	wrongKH, err := keyset.NewHandle(signature.ECDSAP256KeyTemplate())
+	if err != nil {
+		t.Fatalf("failed to build *keyset.Handle: %s", err)
+	}
+
+	_, err = mac.New(wrongKH)
+	if err == nil {
+		t.Fatal("calling New() with wrong *keyset.Handle should fail")
+	}
+}
+
+func TestFactoryWithValidPrimitiveSetType(t *testing.T) {
+	goodKH, err := keyset.NewHandle(mac.HMACSHA256Tag256KeyTemplate())
+	if err != nil {
+		t.Fatalf("failed to build *keyset.Handle: %s", err)
+	}
+
+	_, err = mac.New(goodKH)
+	if err != nil {
+		t.Fatalf("calling New() with good *keyset.Handle failed: %s", err)
+	}
 }

@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -34,6 +36,7 @@
 #include "tink/subtle/subtle_util.h"
 #include "tink/subtle/subtle_util_boringssl.h"
 #include "tink/util/errors.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
 
@@ -42,25 +45,29 @@ namespace tink {
 namespace subtle {
 
 static std::string NonceForSegment(absl::string_view nonce_prefix,
-                              int64_t segment_number, bool is_last_segment) {
-  return absl::StrCat(nonce_prefix, BigEndian32(segment_number),
-                      is_last_segment ? std::string(1, '\x01') : std::string(1, '\x00'),
-                      std::string(4, '\x00'));
+                                   int64_t segment_number,
+                                   bool is_last_segment) {
+  return absl::StrCat(
+      nonce_prefix, BigEndian32(segment_number),
+      is_last_segment ? std::string(1, '\x01') : std::string(1, '\x00'),
+      std::string(4, '\x00'));
 }
 
-static util::Status DeriveKeys(absl::string_view ikm, HashType hkdf_algo,
+static util::Status DeriveKeys(const util::SecretData& ikm, HashType hkdf_algo,
                                absl::string_view salt,
                                absl::string_view associated_data, int key_size,
-                               std::string* key_value, std::string* hmac_key_value) {
+                               util::SecretData* key_value,
+                               util::SecretData* hmac_key_value) {
   int derived_key_material_size =
       key_size + AesCtrHmacStreaming::kHmacKeySizeInBytes;
   auto hkdf_result = Hkdf::ComputeHkdf(hkdf_algo, ikm, salt, associated_data,
                                        derived_key_material_size);
   if (!hkdf_result.ok()) return hkdf_result.status();
-  std::string key_material = std::move(hkdf_result.ValueOrDie());
-  *key_value = key_material.substr(0, key_size);
+  util::SecretData key_material = std::move(hkdf_result.ValueOrDie());
+  *key_value =
+      util::SecretData(key_material.begin(), key_material.begin() + key_size);
   *hmac_key_value =
-      key_material.substr(key_size, AesCtrHmacStreaming::kHmacKeySizeInBytes);
+      util::SecretData(key_material.begin() + key_size, key_material.end());
   return util::OkStatus();
 }
 
@@ -107,10 +114,13 @@ static util::Status Validate(const AesCtrHmacStreaming::Params& params) {
 // AesCtrHmacStreaming
 // static
 util::StatusOr<std::unique_ptr<AesCtrHmacStreaming>> AesCtrHmacStreaming::New(
-    const Params& params) {
-  auto status = Validate(params);
+    Params params) {
+  auto status = internal::CheckFipsCompatibility<AesCtrHmacStreaming>();
   if (!status.ok()) return status;
-  return {absl::WrapUnique(new AesCtrHmacStreaming(params))};
+
+  status = Validate(params);
+  if (!status.ok()) return status;
+  return {absl::WrapUnique(new AesCtrHmacStreaming(std::move(params)))};
 }
 
 // static
@@ -129,7 +139,7 @@ AesCtrHmacStreaming::NewSegmentDecrypter(
 
 // AesCtrHmacStreamSegmentEncrypter
 static std::string MakeHeader(absl::string_view salt,
-                         absl::string_view nonce_prefix) {
+                              absl::string_view nonce_prefix) {
   uint8_t header_size =
       static_cast<uint8_t>(1 + salt.size() + nonce_prefix.size());
   return absl::StrCat(std::string(1, header_size), salt, nonce_prefix);
@@ -147,7 +157,8 @@ AesCtrHmacStreamSegmentEncrypter::New(const AesCtrHmacStreaming::Params& params,
       Random::GetRandomBytes(AesCtrHmacStreaming::kNoncePrefixSizeInBytes);
   std::string header = MakeHeader(salt, nonce_prefix);
 
-  std::string key_value, hmac_key_value;
+  util::SecretData key_value;
+  util::SecretData hmac_key_value;
   status = DeriveKeys(params.ikm, params.hkdf_algo, salt, associated_data,
                       params.key_size, &key_value, &hmac_key_value);
   if (!status.ok()) return status;
@@ -157,14 +168,15 @@ AesCtrHmacStreamSegmentEncrypter::New(const AesCtrHmacStreaming::Params& params,
     return util::Status(util::error::INTERNAL, "invalid key size");
   }
 
-  auto hmac_result =
-      HmacBoringSsl::New(params.tag_algo, params.tag_size, hmac_key_value);
+  auto hmac_result = HmacBoringSsl::New(params.tag_algo, params.tag_size,
+                                        std::move(hmac_key_value));
   if (!hmac_result.ok()) return hmac_result.status();
   auto mac = std::move(hmac_result.ValueOrDie());
 
   return {absl::WrapUnique(new AesCtrHmacStreamSegmentEncrypter(
-      key_value, header, nonce_prefix, params.ciphertext_segment_size,
-      params.ciphertext_offset, params.tag_size, cipher, std::move(mac)))};
+      std::move(key_value), header, nonce_prefix,
+      params.ciphertext_segment_size, params.ciphertext_offset, params.tag_size,
+      cipher, std::move(mac)))};
 }
 
 util::Status AesCtrHmacStreamSegmentEncrypter::EncryptSegment(
@@ -257,9 +269,9 @@ util::Status AesCtrHmacStreamSegmentDecrypter::Init(
   std::string salt(reinterpret_cast<const char*>(header.data() + 1), key_size_);
   nonce_prefix_ =
       std::string(reinterpret_cast<const char*>(header.data() + 1 + key_size_),
-             AesCtrHmacStreaming::kNoncePrefixSizeInBytes);
+                  AesCtrHmacStreaming::kNoncePrefixSizeInBytes);
 
-  std::string hmac_key_value;
+  util::SecretData hmac_key_value;
   auto status = DeriveKeys(ikm_, hkdf_algo_, salt, associated_data_, key_size_,
                            &key_value_, &hmac_key_value);
   if (!status.ok()) return status;
@@ -269,7 +281,8 @@ util::Status AesCtrHmacStreamSegmentDecrypter::Init(
     return util::Status(util::error::INTERNAL, "invalid key size");
   }
 
-  auto hmac_result = HmacBoringSsl::New(tag_algo_, tag_size_, hmac_key_value);
+  auto hmac_result =
+      HmacBoringSsl::New(tag_algo_, tag_size_, std::move(hmac_key_value));
   if (!hmac_result.ok()) return hmac_result.status();
   mac_ = std::move(hmac_result.ValueOrDie());
 

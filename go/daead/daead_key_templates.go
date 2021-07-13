@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -14,13 +16,21 @@
 
 package daead
 
-import tinkpb "github.com/google/tink/proto/tink_go_proto"
+import (
+	"github.com/golang/protobuf/proto"
+	aspb "github.com/google/tink/go/proto/aes_siv_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
+)
 
 // AESSIVKeyTemplate is a KeyTemplate that generates a AES-SIV key.
 func AESSIVKeyTemplate() *tinkpb.KeyTemplate {
+	format := &aspb.AesSivKeyFormat{
+		KeySize: 64,
+	}
+	serializedFormat, _ := proto.Marshal(format)
 	return &tinkpb.KeyTemplate{
-		// Don't set value because KeyFormat is not required.
 		TypeUrl:          aesSIVTypeURL,
 		OutputPrefixType: tinkpb.OutputPrefixType_TINK,
+		Value:            serializedFormat,
 	}
 }

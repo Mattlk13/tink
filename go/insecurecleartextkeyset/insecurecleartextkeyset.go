@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -12,10 +14,11 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-// Package insecurecleartextkeyset provides methods to read or write cleartext keyset material.
+// Package insecurecleartextkeyset provides methods to read or write cleartext
+// keyset material.
 //
-// This package contains dangerous functions, and is separate from the rest of Tink so that its
-// usage can be restricted and audited.
+// This package contains dangerous functions, and is separate from the rest of
+// Tink so that its usage can be restricted and audited.
 package insecurecleartextkeyset
 
 import (
@@ -23,7 +26,7 @@ import (
 
 	"github.com/google/tink/go/internal"
 	"github.com/google/tink/go/keyset"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 var (
@@ -38,7 +41,7 @@ var (
 	errInvalidWriter = errors.New("insecurecleartextkeyset: invalid writer")
 )
 
-// Read creates a keyset.Handle from a a cleartext keyset obtained via r.
+// Read creates a keyset.Handle from a cleartext keyset obtained via r.
 func Read(r keyset.Reader) (*keyset.Handle, error) {
 	if r == nil {
 		return nil, errInvalidReader
@@ -51,8 +54,9 @@ func Read(r keyset.Reader) (*keyset.Handle, error) {
 }
 
 // Write exports the keyset from h to the given writer w without encrypting it.
-// Storing secret key material in an unencrypted fashion is dangerous. If feasible, you should use
-// func keyset.Handle.Write() instead.
+//
+// Storing secret key material in an unencrypted fashion is dangerous. If
+// feasible, you should use func keyset.Handle.Write() instead.
 func Write(h *keyset.Handle, w keyset.Writer) error {
 	if h == nil {
 		return errInvalidHandle

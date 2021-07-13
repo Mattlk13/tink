@@ -10,6 +10,7 @@ tink_cc_library(
     tink::core::key_manager
     tink::daead::deterministic_aead_config
     tink::hybrid::hybrid_config
+    tink::prf::prf_config
     tink::signature::signature_config
     tink::streamingaead::streaming_aead_config
     tink::util::status
@@ -24,6 +25,18 @@ tink_cc_library(
     config_util.h
   DEPS
     tink::proto::config_cc_proto
+)
+
+tink_cc_library(
+  NAME tink_fips
+  SRCS
+    tink_fips.cc
+    tink_fips.h
+  DEPS
+    absl::base
+    crypto
+    tink::core::registry
+    tink::util::status
 )
 
 # tests

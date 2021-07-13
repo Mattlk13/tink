@@ -1,7 +1,9 @@
 # Tink for Go HOW-TO
 
-This document contains instructions and Go code snippets for common tasks in
-[Tink](https://github.com/google/tink).
+This document contains instructions for common tasks in
+[Tink](https://github.com/google/tink). Example code snippets for these tasks
+and API documentation can be found on
+[pkg.go.dev](https://pkg.go.dev/github.com/google/tink/go).
 
 ## Setup instructions
 
@@ -26,347 +28,14 @@ cd $GOPATH/go/src/github.com/google/tink/go
 bazel build ... && bazel test ...
 ```
 
-## GoDoc
-
-Documentation for the Tink API can be found
-[here](https://godoc.org/github.com/google/tink).
-
-## Obtaining and using primitives
-
-[_Primitives_](PRIMITIVES.md) represent cryptographic operations offered by
-Tink, hence they form the core of Tink API. A primitive is just an interface
-that specifies what operations are offered by the primitive. A primitive can
-have multiple implementations, and you choose a desired implementation by
-using a key of corresponding type (see the [this
-section](KEY-MANAGEMENT.md#key-keyset-and-keysethandle) for details).
-
-A list of primitives and their implemenations currently supported by Tink in
-Golang can be found [here](PRIMITIVES.md#golang).
-
-### AEAD
-
-AEAD encryption assures the confidentiality and authenticity of the data. This
-primitive is CPA secure.
-
-```go
-package main
-
-import (
-        "fmt"
-        "log"
-
-        "github.com/google/tink/go/aead"
-        "github.com/google/tink/go/keyset"
-)
-
-func main() {
-
-        kh, err := keyset.NewHandle(aead.AES256GCMKeyTemplate())
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        a, err := aead.New(kh)
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        ct, err := a.Encrypt([]byte("this data needs to be encrypted"), []byte("associated data"))
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        pt, err := a.Decrypt(ct, []byte("associated data"))
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        fmt.Printf("Cipher text: %s\nPlain text: %s\n", ct, pt)
-
-}
-```
-
-### MAC
-
-MAC computes a tag for a given message that can be used to authenticate a
-message. MAC protects data integrity as well as provides for authenticity of the
-message.
-
-```go
-package main
-
-import (
-        "fmt"
-        "log"
-
-        "github.com/google/tink/go/keyset"
-        "github.com/google/tink/go/mac"
-)
-
-func main() {
-
-        kh, err := keyset.NewHandle(mac.HMACSHA256Tag256KeyTemplate())
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        m, err := mac.New(kh)
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        mac, err := m.ComputeMAC([]byte("this data needs to be MACed"))
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        if m.VerifyMAC(mac, []byte("this data needs to be MACed")); err != nil {
-                log.fatal("MAC verification failed")
-        }
-
-        fmt.Println("MAC verification succeeded.")
-
-}
-```
-
-### Deterministic AEAD
-
-Unlike AEAD, implementations of this interface are not semantically secure,
-because encrypting the same plaintext always yields the same ciphertext.
-
-```go
-package main
-
-import (
-        "bytes"
-        "fmt"
-        "log"
-
-        "github.com/google/tink/go/daead"
-        "github.com/google/tink/go/keyset"
-)
-
-func main() {
-
-        kh, err := keyset.NewHandle(daead.AESSIVKeyTemplate())
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        d, err := daead.New(kh)
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        ct1, err := d.EncryptDeterministically([]byte("this data needs to be encrypted"), []byte("additional data"))
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        ct2, err := d.EncryptDeterministically([]byte("this data needs to be encrypted"), []byte("additional data"))
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        if !bytes.Equal(ct1, ct2) {
-                log.Fatal("cipher texts are not equal")
-        }
-
-        fmt.Print("Cipher texts are equal.\n")
-
-        pt, err := d.DecryptDeterministically(ct1, []byte("additional data"))
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        fmt.Printf("Plain text: %s\n", pt)
-
-}
-```
-
-### Signature
-
-To sign data using Tink you can use ECDSA or ED25519 key templates.
-
-```go
-package main
-
-import (
-        "fmt"
-        "log"
-
-        "github.com/google/tink/go/keyset"
-        "github.com/google/tink/go/signature"
-)
-
-func main() {
-
-        khPriv, err := keyset.NewHandle(signature.ECDSAP256KeyTemplate())
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        s, err := signature.NewSigner(khPriv)
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        a, err := s.Sign([]byte("this data needs to be signed"))
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        khPub, err := khPriv.Public()
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        v, err := signature.NewVerifier(khPub)
-
-        if err := v.Verify(a, []byte("this data needs to be signed")); err != nil {
-                log.Fatal("signature verification failed")
-        }
-
-        fmt.Println("Signature verification succeeded.")
-
-}
-```
-
-### Hybrid encryption and decryption
-
-The functionality of Hybrid Encryption is represented as a pair of primitives
-(interfaces):
-
- * `HybridEncrypt` for encryption of data
- * `HybridDecrypt` for decryption
-
-Implementations of these interfaces are secure against adaptive chosen
-ciphertext attacks.
-
-In addition to plaintext, the encryption takes an extra parameter, contextInfo.
-It usually is public data implicit from the context.  It is bound to the
-resulting ciphertext, which allows for checking the integrity of contextInfo
-(but there are no guarantees in regards to the secrecy or authenticity of
-contextInfo).
-
-```go
-package main
-
-import (
-        "fmt"
-        "log"
-
-        "github.com/google/tink/go/hybrid"
-        "github.com/google/tink/go/keyset"
-)
-
-func main() {
-
-        khPriv, err := keyset.NewHandle(hybrid.ECIESHKDFAES128CTRHMACSHA256KeyTemplate())
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        he, err := hybrid.NewHybridEncrypt(khPriv)
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        ct, err := he.Encrypt([]byte("secret message"), []byte("context info"))
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        khPub, err := khPriv.PublicKey()
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        hd, err := hybrid.NewHybridDecrypt(khPub)
-
-        pt, err := hd.Decrypt(ct, []byte("context info"))
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        fmt.Printf("Cipher text: %s\nPlain text: %s\n", ct, pt)
-
-}
-```
-
-
-### Envelope encryption
-
-Tink APIs work with GCP and AWS KMS (cf. more info on
-[Key Management Systems](KEY-MANAGEMENT.md#key-management-systems)
-and [Credentials](KEY-MANAGEMENT.md#credentials)).
-
-```go
-package main
-
-import (
-        "fmt"
-
-        "github.com/google/tink/go/aead"
-        "github.com/google/tink/go/core/registry"
-        "github.com/google/tink/go/integration/gcpkms"
-        "github.com/google/tink/go/keyset"
-)
-
-const (
-        keyURI          = "gcp-kms://......"   // customize for your key
-        credentialsPath = "/mysecurestorage/credentials.json"
-)
-
-func main() {
-        gcpclient, err := gcpkms.NewGCPClient(keyURI)
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        _, err = gcpclient.LoadCredentials(credentialsPath)
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        registry.RegisterKMSClient(gcpclient)
-
-        dek := aead.AES128CTRHMACSHA256KeyTemplate()
-        kh, err := keyset.NewHandle(aead.KMSEnvelopeAEADKeyTemplate(keyURI, dek))
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        a, err := aead.New(kh)
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        ct, err := a.Encrypt([]byte("secret message"), []byte("associated data"))
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        pt, err := a.Decrypt(ct, []byte("associated data"))
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        fmt.Printf("Cipher text: %s\nPlain text: %s\n", ct, pt)
-
-}
-```
-
-## Key management
-
-### Generating new keys and keysets
+## Generating new keys and keysets
 
 To take advantage of key rotation and other key management features, you usually
 do not work with single keys, but with keysets. Keysets are just sets of keys
 with some additional parameters and metadata.
 
 Internally Tink stores keysets as Protocol Buffers, but you can work with
-keysets via a wrapper called keyset handle. You can generate a new keyset and
+keysets via a wrapper called a keyset handle. You can generate a new keyset and
 obtain its handle using a KeyTemplate. KeysetHandle objects enforce certain
 restrictions that prevent accidental leakage of the sensitive key material.
 
@@ -374,23 +43,21 @@ restrictions that prevent accidental leakage of the sensitive key material.
 package main
 
 import (
-        "fmt"
-        "log"
+  "fmt"
+  "log"
 
-        "github.com/google/tink/go/aead"
-        "github.com/google/tink/go/keyset"
+  "github.com/google/tink/go/aead"
+  "github.com/google/tink/go/keyset"
 )
 
 func main() {
+  // Other key templates can also be used.
+  kh, err := keyset.NewHandle(aead.AES128GCMKeyTemplate())
+  if err != nil {
+    log.Fatal(err)
+  }
 
-        // Other key templates can also be used.
-        kh, err := keyset.NewHandle(aead.AES128GCMKeyTemplate())
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        fmt.Println(kh.String())
-
+  fmt.Println(kh.String())
 }
 
 ```
@@ -398,105 +65,209 @@ func main() {
 Key templates are available for MAC, digital signatures, AEAD encryption, DAEAD
 encryption and hybrid encryption.
 
-Key Template Type  | Key Template
------------------- | ------------
-AEAD               | aead.AES128CTRHMACSHA256KeyTemplate()
-AEAD               | aead.AES128GCMKeyTemplate()
-AEAD               | aead.AES256CTRHMACSHA256KeyTemplate()
-AEAD               | aead.AES256GCMKeyTemplate()
-AEAD               | aead.ChaCha20Poly1305KeyTemplate()
-AEAD               | aead.XChaCha20Poly1305KeyTemplate()
-DAEAD              | daead.AESSIVKeyTemplate()
-MAC                | mac.HMACSHA256Tag128KeyTemplate()
-MAC                | mac.HMACSHA256Tag256KeyTemplate()
-MAC                | mac.HMACSHA512Tag256KeyTemplate()
-MAC                | mac.HMACSHA512Tag512KeyTemplate()
-Signature          | signature.ECDSAP256KeyTemplate()
-Signature          | signature.ECDSAP384KeyTemplate()
-Signature          | signature.ECDSAP521KeyTemplate()
-Hybrid             | hybrid.ECIESHKDFAES128GCMKeyTemplate()
-Hybrid             | hybrid.ECIESHKDFAES128CTRHMACSHA256KeyTemplate()
+Key Template Type | Key Template
+----------------- | ------------------------------------------------
+AEAD              | aead.AES128CTRHMACSHA256KeyTemplate()
+AEAD              | aead.AES128GCMKeyTemplate()
+AEAD              | aead.AES256CTRHMACSHA256KeyTemplate()
+AEAD              | aead.AES256GCMKeyTemplate()
+AEAD              | aead.ChaCha20Poly1305KeyTemplate()
+AEAD              | aead.XChaCha20Poly1305KeyTemplate()
+DAEAD             | daead.AESSIVKeyTemplate()
+MAC               | mac.HMACSHA256Tag128KeyTemplate()
+MAC               | mac.HMACSHA256Tag256KeyTemplate()
+MAC               | mac.HMACSHA512Tag256KeyTemplate()
+MAC               | mac.HMACSHA512Tag512KeyTemplate()
+Signature         | signature.ECDSAP256KeyTemplate()
+Signature         | signature.ECDSAP384KeyTemplate()
+Signature         | signature.ECDSAP521KeyTemplate()
+Hybrid            | hybrid.ECIESHKDFAES128GCMKeyTemplate()
+Hybrid            | hybrid.ECIESHKDFAES128CTRHMACSHA256KeyTemplate()
 
-To avoid accidental leakage of sensitive key material, one should avoid mixing
+To avoid accidental leakage of sensitive key material, you should avoid mixing
 keyset generation and usage in code. To support the separation of these
 activities Tink provides a command-line tool, [Tinkey](TINKEY.md), which can be
 used for common key management tasks.
 
-### Storing and loading existing keysets
+## Storing and loading existing keysets
 
 After generating key material, you might want to persist it to a storage system.
-Tink supports persisting the keys after encryption to any io.Writer and
-io.Reader implementations.
+Tink supports encrypting and persisting the keys to any io.Writer and io.Reader
+implementations.
 
 ```go
 package main
 
 import (
-        "fmt"
-        "log"
+  "fmt"
+  "log"
 
-        "github.com/golang/protobuf/proto"
-        "github.com/google/tink/go/aead"
-        "github.com/google/tink/go/core/registry"
-        "github.com/google/tink/go/integration/gcpkms"
-        "github.com/google/tink/go/keyset"
+  "github.com/google/tink/go/aead"
+  "github.com/google/tink/go/core/registry"
+  "github.com/google/tink/go/integration/gcpkms"
+  "github.com/google/tink/go/keyset"
 )
 
 const (
-        keyURI          = "gcp-kms://..."
-        credentialsPath = "/mysecurestorage/..."
+  // Change this. AWS KMS, Google Cloud KMS and HashiCorp Vault are supported out of the box.
+   keyURI = "gcp-kms://projects/tink-examples/locations/global/keyRings/foo/cryptoKeys/bar"
+  credentialsPath = "credentials.json"
 )
 
 func main() {
+  // Generate a new key.
+  kh1, err := keyset.NewHandle(aead.AES128GCMKeyTemplate())
+  if err != nil {
+    log.Fatal(err)
+  }
 
-        // Generate a new key.
-        kh1, err := keyset.NewHandle(aead.AES128GCMKeyTemplate())
-        if err != nil {
-                log.Fatal(err)
-        }
+  // Fetch the master key from a KMS.
+  gcpClient, err := gcpkms.NewClientWithCredentials(keyURI, credentialsPath)
+  if err != nil {
+    log.Fatal(err)
+  }
+  registry.RegisterKMSClient(gcpClient)
+  masterKey, err := gcpClient.GetAEAD(keyURI)
+  if err != nil {
+    log.Fatal(err)
+  }
 
-        // Fetch the master key from a KMS.
-        gcpClient := gcpkms.NewGCPClient(keyURI)
+  // An io.Reader and io.Writer implementation which simply writes to memory.
+  memKeyset := &keyset.MemReaderWriter{}
 
-        _, err := gpcClient.LoadCredentials(credentialsPath)
-        if err != nil {
-                log.Fatal(err)
-        }
+  // Write encrypts the keyset handle with the master key and writes to the
+  // io.Writer implementation (memKeyset). We recommend that you encrypt the
+  // keyset handle before persisting it.
+  if err := kh1.Write(memKeyset, masterKey); err != nil {
+    log.Fatal(err)
+  }
 
-        registry.RegisterKMSClient(gcpClient)
+  // Read reads the encrypted keyset handle back from the io.Reader
+  // implementation and decrypts it using the master key.
+  kh2, err := keyset.Read(memKeyset, masterKey)
+  if err != nil {
+    log.Fatal(err)
+  }
+}
+```
 
-        backend, err := gcpClient.GetAEAD(keyURI)
-        if err != nil {
-                log.Fatal(err)
-        }
+## AEAD
 
-        masterKey, err = aead.NewKMSEnvelopeAead(*aead.AES256GCMKeyTemplate(), backend)
-        if err != nil {
-                log.Fatal(err)
-        }
+The AEAD primitive (authenticated encryption with associated data) is the most
+common primitive to ***encrypt*** data. It is symmetric, and using the same key
+for encryption and decryption.
 
-        // An io.Reader and io.Writer implementation which simply writes to memory.
-        memKeyset := &keyset.MemReaderWriter{}
+Check out the
+[AEAD examples](https://pkg.go.dev/github.com/google/tink/go/aead#example-package).
+The `Play` button at the corner right allows you to run them on the Go
+Playground.
 
-        // Write encrypts the keyset handle with the master key and writes to the
-        // io.Writer implementation (memKeyset).  We recommend you encrypt the keyset
-        // handle before persisting it.
-        if err := kh1.Write(memKeyset, masterKey); err != nil {
-                log.Fatal(err)
-        }
+## Deterministic AEAD
 
-        // Read reads the encrypted keyset handle back from the io.Reader implementation
-        // and decrypts it using the master key.
-        kh2, err := keyset.Read(memKeyset, masterKey)
-        if err != nil {
-                log.Fatal(err)
-        }
+The Deterministic AEAD primitive (authenticated encryption with associated data)
+is used to ***deterministically encrypt*** data. It is symmetric, and using the
+same key for encryption and decryption.
 
-        if !proto.Equal(kh1.Keyset(), kh2.Keyset()) {
-                log.Fatal("key handlers are not equal")
-        }
+Unlike AEAD, implementations of this interface are not semantically secure,
+because encrypting the same plaintext always yields the same ciphertext.
 
-        fmt.Println("Key handlers are equal.")
+Check out the
+[Deterministic AEAD examples](https://pkg.go.dev/github.com/google/tink/go/daead#example-package).
+The `Play` button at the corner right allows you to run them on the Go
+Playground.
 
+## MAC
+
+The MAC primitive allows you to ensure that nobody tampers with data you own. It
+is symmetric, and using the same key for authentication and verification.
+
+Check out the
+[MAC examples](https://pkg.go.dev/github.com/google/tink/go/mac#example-package).
+The `Play` button at the corner right allows you to run them on the Go
+Playground.
+
+## Digital signature
+
+The digital signature primitives allow you to ensure that nobody tampers with
+your data. It is asymmetric, and hence comes with a pair of keys (public key and
+private key). The private key allows to sign messages, and the public key allows
+to verify.
+
+Check out the
+[digital signature examples](https://pkg.go.dev/github.com/google/tink/go/signature#example-package).
+The `Play` button at the corner right allows you to run them on the Go
+Playground.
+
+## Hybrid encryption
+
+The hybrid encryption primitives allow you to encrypt data with a public key.
+Only users with the secret key will be able to decrypt the data.
+
+Check out the
+[hybrid encryption examples](https://pkg.go.dev/github.com/google/tink/go/hybrid#example-package).
+The `Play` button at the corner right allows you to run them on the Go
+Playground.
+
+## Envelope encryption
+
+Via the AEAD interface, Tink supports
+[envelope encryption](KEY-MANAGEMENT.md#envelope-encryption).
+
+For example, you can perform envelope encryption with a Google Cloud KMS key at
+`gcp-kms://projects/tink-examples/locations/global/keyRings/foo/cryptoKeys/bar`
+using the credentials in `credentials.json` as follows:
+
+```go
+package main
+
+import (
+  "encoding/base64"
+  "fmt"
+
+  "github.com/google/tink/go/aead"
+  "github.com/google/tink/go/core/registry"
+  "github.com/google/tink/go/integration/gcpkms"
+  "github.com/google/tink/go/keyset"
+)
+
+const (
+   // Change this. AWS KMS, Google Cloud KMS and HashiCorp Vault are supported out of the box.
+   keyURI          = "gcp-kms://projects/tink-examples/locations/global/keyRings/foo/cryptoKeys/bar"
+   credentialsPath = "credentials.json"
+)
+
+func main() {
+  gcpclient, err := gcpkms.NewClientWithCredentials(keyURI, credentialsPath)
+  if err != nil {
+    log.Fatal(err)
+  }
+  registry.RegisterKMSClient(gcpclient)
+
+  dek := aead.AES128CTRHMACSHA256KeyTemplate()
+  kh, err := keyset.NewHandle(aead.KMSEnvelopeAEADKeyTemplate(keyURI, dek))
+  if err != nil {
+    log.Fatal(err)
+  }
+
+  a, err := aead.New(kh)
+  if err != nil {
+    log.Fatal(err)
+  }
+
+  msg := []byte("this message needs to be encrypted")
+  aad := []byte("this data needs to be authenticated, but not encrypted")
+  ct, err := a.Encrypt(msg, aad)
+  if err != nil {
+    log.Fatal(err)
+  }
+
+  pt, err := a.Decrypt(ct, aad)
+  if err != nil {
+    log.Fatal(err)
+  }
+
+  fmt.Printf("Ciphertext: %s\n", base64.StdEncoding.EncodeToString(ct))
+  fmt.Printf("Original  plaintext: %s\n", msg)
+  fmt.Printf("Decrypted Plaintext: %s\n", pt)
 }
 ```

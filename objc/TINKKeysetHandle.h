@@ -34,7 +34,7 @@ NS_ASSUME_NONNULL_BEGIN
  * Use -initWithKeysetReader:andKey:error: or -initWithTemplate:error: to get an instance of
  * TINKKeysetHandle.
  */
-- (nullable instancetype)init NS_UNAVAILABLE;
+- (instancetype)init NS_UNAVAILABLE;
 
 /**
  * Creates a TINKKeysetHandle from an encrypted keyset obtained via @c reader using @c aeadKey to
@@ -82,6 +82,18 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable instancetype)initFromKeychainWithName:(NSString *)keysetName error:(NSError **)error;
 
 /**
+ * Creates a TINKKeysetHandle from a keyset obtained from the iOS keychain.
+ *
+ * @param keysetName   The keyset name that was used to store the keyset to the iOS keychain.
+ * @param accessGroup  Access group for keychain item used to store the keyset to the iOS keychain.
+ * @param error        If non-nil it will be populated with a descriptive error message.
+ * @return             A TINKKeysetHandle, or nil in case of error.
+ */
+- (nullable instancetype)initFromKeychainWithName:(NSString *)keysetName
+                                      accessGroup:(nullable NSString *)accessGroup
+                                            error:(NSError **)error;
+
+/**
  * Returns a new TINKKeysetHandle that contains the public keys corresponding to the private keys
  * from @c aHandle.
  *
@@ -92,6 +104,18 @@ NS_ASSUME_NONNULL_BEGIN
  */
 + (nullable instancetype)publicKeysetHandleWithHandle:(TINKKeysetHandle *)aHandle
                                                 error:(NSError **)error;
+
+/**
+ * Returns the serialized Keyset-proto for this TINKKeysetHandle if it contains
+ * no sensitive key material.
+ *
+ * @param error  If non-nil it will be populated with a descriptive error
+ *               message.
+ * return        A serialized Keyset-proto if the instance contains no secret
+ *               key material or nil in case of error.
+ */
+- (NSData *)serializedKeysetNoSecret:(NSError **)error;
+
 
 /**
  * Writes the underlying keyset to the iOS keychain under the name specified by @c keysetName.
@@ -111,6 +135,25 @@ NS_ASSUME_NONNULL_BEGIN
                           error:(NSError **)error;
 
 /**
+ * Writes the underlying keyset to the iOS keychain under the name specified by @c keysetName.
+ * The keyset can be retrieved from the keychain by using -initFromKeychainWithName:error:.
+ *
+ * @param keysetName   A unique keyset name that's used to store and retrieve the keyset from the
+ *                     iOS keychain. If an item with the same name exists in the keychain an error
+ *                     will be returned.
+ * @param accessGroup  Access group for keychain item used to store the keyset to the iOS keychain.
+ * @param overwrite    If a keyset with the same name exists in the keychain it will be overwritten
+ *                     when this property is set to YES.
+ * @param error        If non-nill it will be populated with a descriptive error message.
+ * @return             YES if the keyset was successfully written in the keychain.
+ *                     Otherwise, returns NO and sets @c error.
+ */
+- (BOOL)writeToKeychainWithName:(NSString *)keysetName
+                    accessGroup:(nullable NSString *)accessGroup
+                      overwrite:(BOOL)overwrite
+                          error:(NSError **)error;
+
+/**
  * Deletes a keyset from the iOS keychain.
  *
  * @param keysetName The name of the keyset to be deleted.
@@ -119,6 +162,19 @@ NS_ASSUME_NONNULL_BEGIN
  *                   with that name in the keychain. Otherwise, returns NO and sets @c error.
  */
 + (BOOL)deleteFromKeychainWithName:(NSString *)keysetName error:(NSError **)error;
+
+/**
+ * Deletes a keyset from the iOS keychain.
+ *
+ * @param keysetName The name of the keyset to be deleted.
+ * @param accessGroup  Access group for keychain item used to store the keyset to the iOS keychain.
+ * @param error      If non-nil it will be populated with a descriptive error message.
+ * @return           YES if the keyset was successfully deleted or if there was no keyset
+ *                   with that name in the keychain. Otherwise, returns NO and sets @c error.
+ */
++ (BOOL)deleteFromKeychainWithName:(NSString *)keysetName
+                       accessGroup:(nullable NSString *)accessGroup
+                             error:(NSError **)error;
 
 @end
 

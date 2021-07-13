@@ -23,6 +23,10 @@ import com.google.crypto.tink.subtle.EllipticCurves;
 import com.google.crypto.tink.subtle.EllipticCurves.EcdsaEncoding;
 import com.google.crypto.tink.subtle.Enums.HashType;
 import com.google.crypto.tink.util.KeysDownloader;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -36,9 +40,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
 
 /**
  * An implementation of the verifier side of Server-Side Verification of Google AdMob Rewarded Ads.
@@ -65,6 +66,8 @@ import org.json.JSONObject;
  * Builder also allows you to customize other properties.
  */
 public final class RewardedAdsVerifier {
+  private static final Charset UTF_8 = Charset.forName("UTF-8");
+
   /** Default HTTP transport used by this class. */
   private static final NetHttpTransport DEFAULT_HTTP_TRANSPORT =
       new NetHttpTransport.Builder().build();
@@ -85,13 +88,13 @@ public final class RewardedAdsVerifier {
 
   /**
    * Instance configured to talk to fetch keys from production environment (from {@link
-   * KeysDownloader#PUBLIC_KEYS_URL_PROD}).
+   * #PUBLIC_KEYS_URL_PROD}).
    */
   public static final KeysDownloader KEYS_DOWNLOADER_INSTANCE_PROD =
       new KeysDownloader(DEFAULT_BACKGROUND_EXECUTOR, DEFAULT_HTTP_TRANSPORT, PUBLIC_KEYS_URL_PROD);
   /**
    * Instance configured to talk to fetch keys from test environment (from {@link
-   * KeysDownloader#KEYS_URL_TEST}).
+   * #PUBLIC_KEYS_URL_TEST}).
    */
   public static final KeysDownloader KEYS_DOWNLOADER_INSTANCE_TEST =
       new KeysDownloader(DEFAULT_BACKGROUND_EXECUTOR, DEFAULT_HTTP_TRANSPORT, PUBLIC_KEYS_URL_TEST);
@@ -113,7 +116,7 @@ public final class RewardedAdsVerifier {
   /**
    * Verifies that {@code rewardUrl} has a valid signature.
    *
-   * <p>This method assumes that the name of the last two query parameters of {@code rewardUrl} are
+   * <p>This method requires that the name of the last two query parameters of {@code rewardUrl} are
    * {@link #SIGNATURE_PARAM_NAME} and {@link #KEY_ID_PARAM_NAME} in that order.
    */
   public void verify(String rewardUrl) throws GeneralSecurityException {
@@ -125,24 +128,31 @@ public final class RewardedAdsVerifier {
     }
     String queryString = uri.getQuery();
     int i = queryString.indexOf(SIGNATURE_PARAM_NAME);
-    if (i == -1) {
-      throw new GeneralSecurityException("needs a signature query parameter");
+    if (i <= 0 || queryString.charAt(i - 1) != '&') {
+      throw new GeneralSecurityException(
+          "signature and key id must be the last two query parameters");
     }
     byte[] tbsData =
-        queryString
-            .substring(0, i - 1 /* i - 1 instead of i because of & */)
-            .getBytes(Charset.forName("UTF-8"));
+        queryString.substring(0, i - 1 /* i - 1 instead of i because of & */).getBytes(UTF_8);
 
     String sigAndKeyId = queryString.substring(i);
     i = sigAndKeyId.indexOf(KEY_ID_PARAM_NAME);
-    if (i == -1) {
-      throw new GeneralSecurityException("needs a key_id query parameter");
+    if (i == -1 || sigAndKeyId.charAt(i - 1) != '&') {
+      throw new GeneralSecurityException(
+          "signature and key id must be the last two query parameters");
     }
     String sig =
         sigAndKeyId.substring(
             SIGNATURE_PARAM_NAME.length(), i - 1 /* i - 1 instead of i because of & */);
-    long keyId = Long.parseLong(sigAndKeyId.substring(i + KEY_ID_PARAM_NAME.length()));
-    verify(tbsData, keyId, Base64.urlSafeDecode(sig));
+
+    // We don't have to check that keyId is the last parameter, because the long conversion would
+    // fail anyway if there's any trailing data.
+    try {
+      long keyId = Long.parseLong(sigAndKeyId.substring(i + KEY_ID_PARAM_NAME.length()));
+      verify(tbsData, keyId, Base64.urlSafeDecode(sig));
+    } catch (NumberFormatException ex) {
+      throw new GeneralSecurityException("key_id must be a long");
+    }
   }
 
   private void verify(final byte[] tbs, long keyId, final byte[] signature)
@@ -165,7 +175,7 @@ public final class RewardedAdsVerifier {
   /** Builder for RewardedAdsVerifier. */
   public static class Builder {
     private final List<VerifyingPublicKeysProvider> verifyingPublicKeysProviders =
-        new ArrayList<VerifyingPublicKeysProvider>();
+        new ArrayList<>();
 
     public Builder() {}
 
@@ -292,14 +302,15 @@ public final class RewardedAdsVerifier {
       throws GeneralSecurityException {
     Map<Long, ECPublicKey> publicKeys = new HashMap<>();
     try {
-      JSONArray keys = new JSONObject(publicKeysJson).getJSONArray("keys");
-      for (int i = 0; i < keys.length(); i++) {
-        JSONObject key = keys.getJSONObject(i);
+      JsonArray keys =
+          JsonParser.parseString(publicKeysJson).getAsJsonObject().get("keys").getAsJsonArray();
+      for (int i = 0; i < keys.size(); i++) {
+        JsonObject key = keys.get(i).getAsJsonObject();
         publicKeys.put(
-            key.getLong("keyId"),
-            EllipticCurves.getEcPublicKey(Base64.decode(key.getString("base64"))));
+            key.get("keyId").getAsLong(),
+            EllipticCurves.getEcPublicKey(Base64.decode(key.get("base64").getAsString())));
       }
-    } catch (JSONException e) {
+    } catch (JsonParseException | IllegalStateException e) {
       throw new GeneralSecurityException("failed to extract trusted signing public keys", e);
     }
     if (publicKeys.isEmpty()) {

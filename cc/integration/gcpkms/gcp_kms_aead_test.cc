@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -23,7 +25,8 @@ namespace {
 using crypto::tink::integration::gcpkms::GcpKmsAead;
 
 class GcpKmsAeadTest : public ::testing::Test {
-  // TODO(przydatek): add a test with a mock KMSClient.
+  // TODO(kste): Add tests when mock for
+  // google::cloud::kms::v1::KeyManagementService::StubInterface is available.
 };
 
 

@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -29,16 +31,18 @@ namespace {
 
 TEST(EncryptThenDecrypt, Basic) {
   DummyStreamingAead streaming_aead("Aead 1");
-  EXPECT_THAT(
-      EncryptThenDecrypt(&streaming_aead, &streaming_aead, "plaintext", "aad"),
-      IsOk());
+  int ciphertext_offset = 0;
+  EXPECT_THAT(EncryptThenDecrypt(&streaming_aead, &streaming_aead, "plaintext",
+                                 "aad", ciphertext_offset),
+              IsOk());
 }
 
 TEST(EncryptThenDecrypt, DifferentAeads) {
   DummyStreamingAead streaming_aead_1("Aead 1");
   DummyStreamingAead streaming_aead_2("Aead 2");
+  int ciphertext_offset = 0;
   EXPECT_THAT(EncryptThenDecrypt(&streaming_aead_1, &streaming_aead_2,
-                                 "plaintext", "aad"),
+                                 "plaintext", "aad", ciphertext_offset),
               StatusIs(util::error::INVALID_ARGUMENT));
 }
 

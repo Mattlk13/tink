@@ -16,10 +16,10 @@
 #ifndef TINK_STREAMINGAEAD_AES_GCM_HKDF_STREAMING_KEY_MANAGER_H_
 #define TINK_STREAMINGAEAD_AES_GCM_HKDF_STREAMING_KEY_MANAGER_H_
 
-#include <algorithm>
-#include <vector>
+#include <string>
 
-#include "absl/strings/string_view.h"
+#include "absl/memory/memory.h"
+#include "absl/strings/str_cat.h"
 #include "tink/core/key_type_manager.h"
 #include "tink/key_manager.h"
 #include "tink/streaming_aead.h"
@@ -28,6 +28,7 @@
 #include "tink/util/enums.h"
 #include "tink/util/errors.h"
 #include "tink/util/protobuf_helper.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
 #include "proto/aes_gcm_hkdf_streaming.pb.h"
@@ -46,13 +47,15 @@ class AesGcmHkdfStreamingKeyManager
     crypto::tink::util::StatusOr<std::unique_ptr<StreamingAead>> Create(
         const google::crypto::tink::AesGcmHkdfStreamingKey& key)
         const override {
-      auto streaming_result = crypto::tink::subtle::AesGcmHkdfStreaming::New(
-          key.key_value(),
-          crypto::tink::util::Enums::ProtoToSubtle(
-              key.params().hkdf_hash_type()),
-          key.params().derived_key_size(),
-          key.params().ciphertext_segment_size(),
-          /* ciphertext_offset = */ 0);
+      subtle::AesGcmHkdfStreaming::Params params;
+      params.ikm = util::SecretDataFromStringView(key.key_value());
+      params.hkdf_hash = crypto::tink::util::Enums::ProtoToSubtle(
+          key.params().hkdf_hash_type());
+      params.derived_key_size = key.params().derived_key_size();
+      params.ciphertext_segment_size = key.params().ciphertext_segment_size();
+      params.ciphertext_offset = 0;
+      auto streaming_result =
+          subtle::AesGcmHkdfStreaming::New(std::move(params));
       if (!streaming_result.ok()) return streaming_result.status();
       return {std::move(streaming_result.ValueOrDie())};
     }
@@ -83,6 +86,11 @@ class AesGcmHkdfStreamingKeyManager
   crypto::tink::util::StatusOr<google::crypto::tink::AesGcmHkdfStreamingKey>
   CreateKey(const google::crypto::tink::AesGcmHkdfStreamingKeyFormat&
                 key_format) const override;
+
+  crypto::tink::util::StatusOr<google::crypto::tink::AesGcmHkdfStreamingKey>
+  DeriveKey(
+      const google::crypto::tink::AesGcmHkdfStreamingKeyFormat& key_format,
+      InputStream* input_stream) const override;
 
   ~AesGcmHkdfStreamingKeyManager() override {}
 

@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -24,9 +26,9 @@ import (
 	"github.com/google/tink/go/subtle/random"
 	"github.com/google/tink/go/testutil"
 
-	subtedaead "github.com/google/tink/go/subtle/daead"
-	aspb "github.com/google/tink/proto/aes_siv_go_proto"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	"github.com/google/tink/go/daead/subtle"
+	aspb "github.com/google/tink/go/proto/aes_siv_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 func TestAESSIVPrimitive(t *testing.T) {
@@ -102,6 +104,24 @@ func TestAESSIVNewKeyData(t *testing.T) {
 	}
 }
 
+func TestAESSIVNewKeyInvalid(t *testing.T) {
+	km, err := registry.GetKeyManager(testutil.AESSIVTypeURL)
+	if err != nil {
+		t.Errorf("cannot obtain AESSIV key manager: %s", err)
+	}
+	keyFormat := &aspb.AesSivKeyFormat{
+		KeySize: subtle.AESSIVKeySize - 1,
+	}
+	serializedKeyFormat, err := proto.Marshal(keyFormat)
+	if err != nil {
+		t.Errorf("proto.Marshal(keyFormat) = %v; want nil", err)
+	}
+	_, err = km.NewKey(serializedKeyFormat)
+	if err == nil {
+		t.Errorf("km.NewKey(serializedKeyFormat) = _, nil; want _, err")
+	}
+}
+
 func TestAESSIVDoesSupport(t *testing.T) {
 	km, err := registry.GetKeyManager(testutil.AESSIVTypeURL)
 	if err != nil {
@@ -126,7 +146,7 @@ func TestAESSIVTypeURL(t *testing.T) {
 }
 
 func validateAESSIVPrimitive(p interface{}, key *aspb.AesSivKey) error {
-	cipher := p.(*subtedaead.AESSIV)
+	cipher := p.(*subtle.AESSIV)
 	// try to encrypt and decrypt
 	pt := random.GetRandomBytes(32)
 	aad := random.GetRandomBytes(32)
@@ -148,12 +168,12 @@ func validateAESSIVKey(key *aspb.AesSivKey) error {
 	if key.Version != testutil.AESSIVKeyVersion {
 		return fmt.Errorf("incorrect key version: keyVersion != %d", testutil.AESSIVKeyVersion)
 	}
-	if uint32(len(key.KeyValue)) != subtedaead.AESSIVKeySize {
-		return fmt.Errorf("incorrect key size: keySize != %d", subtedaead.AESSIVKeySize)
+	if uint32(len(key.KeyValue)) != subtle.AESSIVKeySize {
+		return fmt.Errorf("incorrect key size: keySize != %d", subtle.AESSIVKeySize)
 	}
 
 	// Try to encrypt and decrypt.
-	p, err := subtedaead.NewAESSIV(key.KeyValue)
+	p, err := subtle.NewAESSIV(key.KeyValue)
 	if err != nil {
 		return fmt.Errorf("invalid key: %v", key.KeyValue)
 	}
@@ -182,7 +202,7 @@ func genInvalidAESSIVKeys() []*aspb.AesSivKey {
 		// Bad version.
 		&aspb.AesSivKey{
 			Version:  testutil.AESSIVKeyVersion + 1,
-			KeyValue: random.GetRandomBytes(subtedaead.AESSIVKeySize),
+			KeyValue: random.GetRandomBytes(subtle.AESSIVKeySize),
 		},
 	}
 }

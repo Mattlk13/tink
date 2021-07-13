@@ -1,3 +1,5 @@
+// Copyright 2018 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -19,65 +21,119 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/google/tink/go/keyset"
 	"github.com/google/tink/go/signature"
 	"github.com/google/tink/go/testutil"
-	commonpb "github.com/google/tink/proto/common_go_proto"
-	ecdsapb "github.com/google/tink/proto/ecdsa_go_proto"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
-func TestECDSAKeyTemplates(t *testing.T) {
-	var template *tinkpb.KeyTemplate
-	var err error
-	// ECDSA P-256
-	template = signature.ECDSAP256KeyTemplate()
-	err = checkECDSAKeyTemplate(template,
-		commonpb.HashType_SHA256,
-		commonpb.EllipticCurveType_NIST_P256,
-		ecdsapb.EcdsaSignatureEncoding_DER)
-	if err != nil {
-		t.Errorf("invalid ECDSA P-256 key template: %s", err)
+func TestKeyTemplates(t *testing.T) {
+	testutil.SkipTestIfTestSrcDirIsNotSet(t)
+	var testCases = []struct {
+		name     string
+		template *tinkpb.KeyTemplate
+	}{
+		{name: "ECDSA_P256",
+			template: signature.ECDSAP256KeyTemplate()},
+		{name: "ECDSA_P384",
+			template: signature.ECDSAP384KeyTemplate()},
+		{name: "ECDSA_P521",
+			template: signature.ECDSAP521KeyTemplate()},
 	}
-	// ECDSA P-384
-	template = signature.ECDSAP384KeyTemplate()
-	err = checkECDSAKeyTemplate(template,
-		commonpb.HashType_SHA512,
-		commonpb.EllipticCurveType_NIST_P384,
-		ecdsapb.EcdsaSignatureEncoding_DER)
-	if err != nil {
-		t.Errorf("invalid ECDSA P-384 key template: %s", err)
-	}
-	// ECDSA P-521
-	template = signature.ECDSAP521KeyTemplate()
-	err = checkECDSAKeyTemplate(template,
-		commonpb.HashType_SHA512,
-		commonpb.EllipticCurveType_NIST_P521,
-		ecdsapb.EcdsaSignatureEncoding_DER)
-	if err != nil {
-		t.Errorf("invalid ECDSA P-521 key template: %s", err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			want, err := testutil.KeyTemplateProto("signature", tc.name)
+			if err != nil {
+				t.Fatalf("testutil.KeyTemplateProto('signature', tc.name) failed: %s", err)
+			}
+			if !proto.Equal(want, tc.template) {
+				t.Errorf("template %s is not equal to '%s'", tc.name, tc.template)
+			}
+			if err := testSignVerify(tc.template); err != nil {
+				t.Errorf("%v", err)
+			}
+		})
 	}
 }
 
-func checkECDSAKeyTemplate(template *tinkpb.KeyTemplate,
-	hashType commonpb.HashType,
-	curve commonpb.EllipticCurveType,
-	encoding ecdsapb.EcdsaSignatureEncoding) error {
-	if template.TypeUrl != testutil.ECDSASignerTypeURL {
-		return fmt.Errorf("incorrect typeurl: expect %s, got %s", testutil.ECDSASignerTypeURL, template.TypeUrl)
+func TestKeyWithoutPrefixTemplates(t *testing.T) {
+	testutil.SkipTestIfTestSrcDirIsNotSet(t)
+	var testCases = []struct {
+		name     string
+		template *tinkpb.KeyTemplate
+	}{
+		{name: "ECDSA_P256",
+			template: signature.ECDSAP256KeyWithoutPrefixTemplate()},
+		{name: "ECDSA_P384",
+			template: signature.ECDSAP384KeyWithoutPrefixTemplate()},
+		{name: "ECDSA_P521",
+			template: signature.ECDSAP521KeyWithoutPrefixTemplate()},
 	}
-	format := new(ecdsapb.EcdsaKeyFormat)
-	if err := proto.Unmarshal(template.Value, format); err != nil {
-		return fmt.Errorf("cannot unmarshak key format: %s", err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			want, err := testutil.KeyTemplateProto("signature", tc.name)
+			if err != nil {
+				t.Fatalf("testutil.KeyTemplateProto('signature', tc.name) failed: %s", err)
+			}
+			want.OutputPrefixType = tinkpb.OutputPrefixType_RAW
+			if !proto.Equal(want, tc.template) {
+				t.Errorf("template %s is not equal to '%s'", tc.name, tc.template)
+			}
+			if err := testSignVerify(tc.template); err != nil {
+				t.Errorf("%v", err)
+			}
+		})
 	}
-	params := format.Params
-	if params.HashType != hashType {
-		return fmt.Errorf("incorrect hash type: expect %d, got %d", hashType, params.HashType)
+}
+
+func testSignVerify(template *tinkpb.KeyTemplate) error {
+	privateHandle, err := keyset.NewHandle(template)
+	if err != nil {
+		return fmt.Errorf("keyset.NewHandle(tc.template) failed: %s", err)
 	}
-	if params.Curve != curve {
-		return fmt.Errorf("incorrect curve: expect %d, got %d", curve, params.Curve)
+
+	signer, err := signature.NewSigner(privateHandle)
+	if err != nil {
+		return fmt.Errorf("signature.NewSigner(privateHandle) failed: %s", err)
 	}
-	if params.Encoding != encoding {
-		return fmt.Errorf("incorrect encoding: expect %d, got %d", encoding, params.Encoding)
+	publicHandle, err := privateHandle.Public()
+	if err != nil {
+		return fmt.Errorf("privateHandle.Public() failed: %s", err)
+	}
+	verifier, err := signature.NewVerifier(publicHandle)
+	if err != nil {
+		return fmt.Errorf("signature.NewVerifier(publicHandle) failed: %s", err)
+	}
+
+	var testInputs = []struct {
+		message1 []byte
+		message2 []byte
+	}{
+		{
+			message1: []byte("this data needs to be signed"),
+			message2: []byte("this data needs to be signed"),
+		}, {
+			message1: []byte(""),
+			message2: []byte(""),
+		}, {
+			message1: []byte(""),
+			message2: nil,
+		}, {
+			message1: nil,
+			message2: []byte(""),
+		}, {
+			message1: nil,
+			message2: nil,
+		},
+	}
+	for _, ti := range testInputs {
+		sig, err := signer.Sign(ti.message1)
+		if err != nil {
+			return fmt.Errorf("signer.Sign(ti.message1) failed: %s", err)
+		}
+		if err := verifier.Verify(sig, ti.message2); err != nil {
+			return fmt.Errorf("verifier.Verify(sig, ti.message2) failed: %s", err)
+		}
 	}
 	return nil
 }

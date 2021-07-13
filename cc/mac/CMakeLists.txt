@@ -26,6 +26,7 @@ tink_cc_library(
     tink::mac::hmac_key_manager
     tink::mac::mac_wrapper
     tink::config::config_util
+    tink::config::tink_fips
     tink::core::registry
     tink::util::status
     tink::proto::config_cc_proto
@@ -76,12 +77,15 @@ tink_cc_library(
     tink::util::enums
     tink::util::errors
     tink::util::protobuf_helper
+    tink::util::secret_data
     tink::util::status
     tink::util::statusor
     tink::util::validation
     tink::proto::common_cc_proto
     tink::proto::aes_cmac_cc_proto
     tink::proto::tink_cc_proto
+    absl::memory
+    absl::strings
 )
 
 tink_cc_library(
@@ -97,13 +101,16 @@ tink_cc_library(
     tink::util::constants
     tink::util::enums
     tink::util::errors
+    tink::util::input_stream_util
     tink::util::protobuf_helper
+    tink::util::secret_data
     tink::util::status
     tink::util::statusor
     tink::util::validation
     tink::proto::common_cc_proto
     tink::proto::hmac_cc_proto
     tink::proto::tink_cc_proto
+    absl::memory
     absl::strings
 )
 
@@ -121,6 +128,7 @@ tink_cc_test(
     tink::util::test_matchers
     tink::util::test_util
     tink::proto::tink_cc_proto
+    absl::strings
 )
 
 tink_cc_test(
@@ -130,6 +138,7 @@ tink_cc_test(
     tink::mac::hmac_key_manager
     tink::mac::mac_config
     tink::mac::mac_key_templates
+    tink::config::tink_fips
     tink::core::config
     tink::core::keyset_handle
     tink::core::mac
@@ -148,6 +157,7 @@ tink_cc_test(
     tink::core::crypto_format
     tink::core::keyset_handle
     tink::core::mac
+    tink::internal::key_info
     tink::mac::hmac_key_manager
     tink::util::test_keyset_handle
     tink::util::status
@@ -197,6 +207,8 @@ tink_cc_test(
     tink::mac::hmac_key_manager
     tink::core::key_manager_impl
     tink::core::mac
+    tink::util::istream_input_stream
+    tink::util::secret_data
     tink::util::status
     tink::util::statusor
     tink::util::test_matchers

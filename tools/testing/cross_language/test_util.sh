@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright 2018 Google LLC
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -13,9 +15,9 @@
 ################################################################################
 
 
-ROOT_DIR="$TEST_SRCDIR/tink"
-TINKEY_CLI="$ROOT_DIR/tools/tinkey/tinkey"
-ENVELOPE_CLI="$ROOT_DIR/tools/testing/go/generate_envelope_keyset"
+ROOT_DIR="$TEST_SRCDIR/tools"
+TINKEY_CLI="$ROOT_DIR/tinkey/tinkey"
+ENVELOPE_CLI="$ROOT_DIR/testing/go/generate_envelope_keyset"
 #############################################################################
 ##### Helper functions.
 
@@ -115,28 +117,6 @@ generate_plaintext() {
        " named $plaintext_name just like that." > $plaintext_file
 }
 
-# Generates some example plaintext data, and stores it in $plaintext_file.
-generate_long_plaintext() {
-  local plaintext_name="$1"
-  local size_mb="$2"
-  local bytes_in_mb="$3"
-
-  plaintext_file="$TEST_TMPDIR/${plaintext_name}_plaintext.bin"
-  dd if=/dev/urandom of="$plaintext_file" bs="$bytes_in_mb" count="$size_mb"
-}
-
-
-# Checks that two values are equal.
-assert_equals() {
-  local expected="$1"
-  local actual="$2"
-  if [ "$expected" != "$actual" ]; then
-    echo "--- Failure: expected value: [$expected], actual value: [$actual]"
-    exit 1
-  fi
-  echo "    Success: got [$actual], as expected."
-}
-
 # Checks that two files are equal.
 assert_files_equal() {
   local expected_file="$1"
@@ -144,7 +124,7 @@ assert_files_equal() {
   echo "*** Checking that 2 files are equal:"
   echo "    file #1: $expected_file"
   echo "    file #2: $given_file"
-  diff -q $expected_file $given_file
+  diff $expected_file $given_file
   if [ $? -ne 0 ]; then
     echo "--- Failure: the files are different."
     exit 1

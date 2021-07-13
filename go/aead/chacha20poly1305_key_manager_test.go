@@ -1,3 +1,5 @@
+// Copyright 2018 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -19,15 +21,15 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/golang/protobuf/proto"
 	"golang.org/x/crypto/chacha20poly1305"
+	"github.com/golang/protobuf/proto"
 	"github.com/google/tink/go/core/registry"
 	"github.com/google/tink/go/subtle/random"
 	"github.com/google/tink/go/testutil"
 
-	subteaead "github.com/google/tink/go/subtle/aead"
-	cppb "github.com/google/tink/proto/chacha20_poly1305_go_proto"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	"github.com/google/tink/go/aead/subtle"
+	cppb "github.com/google/tink/go/proto/chacha20_poly1305_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 func TestChaCha20Poly1305GetPrimitive(t *testing.T) {
@@ -147,7 +149,7 @@ func genInvalidChaCha20Poly1305Keys() []*cppb.ChaCha20Poly1305Key {
 }
 
 func validateChaCha20Poly1305Primitive(p interface{}, key *cppb.ChaCha20Poly1305Key) error {
-	cipher := p.(*subteaead.ChaCha20Poly1305)
+	cipher := p.(*subtle.ChaCha20Poly1305)
 	if !bytes.Equal(cipher.Key, key.KeyValue) {
 		return fmt.Errorf("key and primitive don't match")
 	}
@@ -178,7 +180,7 @@ func validateChaCha20Poly1305Key(key *cppb.ChaCha20Poly1305Key) error {
 	}
 
 	// Try to encrypt and decrypt.
-	p, err := subteaead.NewChaCha20Poly1305(key.KeyValue)
+	p, err := subtle.NewChaCha20Poly1305(key.KeyValue)
 	if err != nil {
 		return fmt.Errorf("invalid key: %v", key.KeyValue)
 	}

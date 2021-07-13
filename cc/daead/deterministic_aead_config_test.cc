@@ -16,9 +16,12 @@
 
 #include "tink/daead/deterministic_aead_config.h"
 
+#include <list>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "tink/config.h"
+#include "tink/config/tink_fips.h"
 #include "tink/daead/aes_siv_key_manager.h"
 #include "tink/daead/deterministic_aead_key_templates.h"
 #include "tink/deterministic_aead.h"
@@ -43,6 +46,10 @@ class DeterministicAeadConfigTest : public ::testing::Test {
 };
 
 TEST_F(DeterministicAeadConfigTest, Basic) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+
   EXPECT_THAT(Registry::get_key_manager<DeterministicAead>(
                   AesSivKeyManager().get_key_type())
                   .status(),
@@ -57,18 +64,22 @@ TEST_F(DeterministicAeadConfigTest, Basic) {
 // Tests that the DeterministicAeadWrapper has been properly registered and we
 // can wrap primitives.
 TEST_F(DeterministicAeadConfigTest, WrappersRegistered) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+
   ASSERT_TRUE(DeterministicAeadConfig::Register().ok());
 
-  google::crypto::tink::Keyset::Key key;
-  key.set_status(google::crypto::tink::KeyStatusType::ENABLED);
-  key.set_key_id(1234);
-  key.set_output_prefix_type(google::crypto::tink::OutputPrefixType::RAW);
+  google::crypto::tink::KeysetInfo::KeyInfo key_info;
+  key_info.set_status(google::crypto::tink::KeyStatusType::ENABLED);
+  key_info.set_key_id(1234);
+  key_info.set_output_prefix_type(google::crypto::tink::OutputPrefixType::RAW);
   auto primitive_set = absl::make_unique<PrimitiveSet<DeterministicAead>>();
   ASSERT_THAT(
       primitive_set->set_primary(
           primitive_set
               ->AddPrimitive(absl::make_unique<DummyDeterministicAead>("dummy"),
-                             key)
+                             key_info)
               .ValueOrDie()),
       IsOk());
 
@@ -86,8 +97,26 @@ TEST_F(DeterministicAeadConfigTest, WrappersRegistered) {
   EXPECT_THAT(decryption_result.ValueOrDie(), Eq("secret"));
 
   decryption_result = DummyDeterministicAead("dummy").DecryptDeterministically(
-      encryption_result.ValueOrDie(), "wrog");
+      encryption_result.ValueOrDie(), "wrong");
   EXPECT_FALSE(decryption_result.status().ok());
+}
+
+TEST_F(DeterministicAeadConfigTest, RegisterFipsValidTemplates) {
+  if (!IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Only supported in FIPS-only mode";
+  }
+
+  EXPECT_THAT(DeterministicAeadConfig::Register(), IsOk());
+
+  // Check that we can not retrieve non-FIPS key handle
+  std::list<google::crypto::tink::KeyTemplate> non_fips_key_templates;
+  non_fips_key_templates.push_back(DeterministicAeadKeyTemplates::Aes256Siv());
+
+  for (auto key_template : non_fips_key_templates) {
+    auto new_keyset_handle_result = KeysetHandle::GenerateNew(key_template);
+    EXPECT_THAT(new_keyset_handle_result.status(),
+               StatusIs(util::error::NOT_FOUND));
+  }
 }
 
 }  // namespace

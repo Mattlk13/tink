@@ -18,14 +18,12 @@
 #define TINK_SUBTLE_AES_GCM_HKDF_STREAMING_H_
 
 #include <memory>
+#include <utility>
 
-#include "absl/strings/string_view.h"
-#include "tink/input_stream.h"
-#include "tink/output_stream.h"
+#include "tink/internal/fips_utils.h"
 #include "tink/subtle/common_enums.h"
 #include "tink/subtle/nonce_based_streaming_aead.h"
-#include "tink/subtle/stream_segment_decrypter.h"
-#include "tink/subtle/stream_segment_encrypter.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/statusor.h"
 
 namespace crypto {
@@ -34,29 +32,40 @@ namespace subtle {
 
 class AesGcmHkdfStreaming : public NonceBasedStreamingAead {
  public:
-  static crypto::tink::util::StatusOr<std::unique_ptr<AesGcmHkdfStreaming>>
-  New(absl::string_view ikm,
-      HashType hkdf_hash,
-      int derived_key_size,
-      int ciphertext_segment_size,
-      int ciphertext_offset);
+  struct Params {
+    util::SecretData ikm;
+    HashType hkdf_hash;
+    int derived_key_size;
+    int ciphertext_segment_size;
+    int ciphertext_offset;
+  };
 
-  ~AesGcmHkdfStreaming() override {}
+  static util::StatusOr<std::unique_ptr<AesGcmHkdfStreaming>> New(
+      Params params);
+
+  static constexpr crypto::tink::internal::FipsCompatibility kFipsStatus =
+      crypto::tink::internal::FipsCompatibility::kNotFips;
 
  protected:
-  crypto::tink::util::StatusOr<std::unique_ptr<StreamSegmentEncrypter>>
-  NewSegmentEncrypter(absl::string_view associated_data) const override;
+  util::StatusOr<std::unique_ptr<StreamSegmentEncrypter>> NewSegmentEncrypter(
+      absl::string_view associated_data) const override;
 
-  crypto::tink::util::StatusOr<std::unique_ptr<StreamSegmentDecrypter>>
-  NewSegmentDecrypter(absl::string_view associated_data) const override;
+  util::StatusOr<std::unique_ptr<StreamSegmentDecrypter>> NewSegmentDecrypter(
+      absl::string_view associated_data) const override;
 
  private:
-  AesGcmHkdfStreaming() {}
-  std::string ikm_;
-  HashType hkdf_hash_;
-  int derived_key_size_;
-  int ciphertext_segment_size_;
-  int ciphertext_offset_;
+  explicit AesGcmHkdfStreaming(Params params)
+      : ikm_(std::move(params.ikm)),
+        hkdf_hash_(params.hkdf_hash),
+        derived_key_size_(params.derived_key_size),
+        ciphertext_segment_size_(params.ciphertext_segment_size),
+        ciphertext_offset_(params.ciphertext_offset) {}
+
+  const util::SecretData ikm_;
+  const HashType hkdf_hash_;
+  const int derived_key_size_;
+  const int ciphertext_segment_size_;
+  const int ciphertext_offset_;
 };
 
 }  // namespace subtle

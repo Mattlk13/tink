@@ -1,3 +1,5 @@
+// Copyright 2018 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -83,8 +85,7 @@ AwsKmsAead::New(absl::string_view key_arn,
 }
 
 StatusOr<std::string> AwsKmsAead::Encrypt(
-    absl::string_view plaintext,
-    absl::string_view associated_data) const {
+    absl::string_view plaintext, absl::string_view associated_data) const {
   Aws::KMS::Model::EncryptRequest req;
   req.SetKeyId(key_arn_.c_str());
   Aws::Utils::ByteBuffer plaintext_buffer(
@@ -106,13 +107,13 @@ StatusOr<std::string> AwsKmsAead::Encrypt(
   auto& err = outcome.GetError();
   return ToStatusF(util::error::INVALID_ARGUMENT,
                    "AWS KMS encryption failed with error: %s",
-                   AwsErrorToString(err).c_str());
+                   AwsErrorToString(err));
 }
 
 StatusOr<std::string> AwsKmsAead::Decrypt(
-    absl::string_view ciphertext,
-    absl::string_view associated_data) const {
+    absl::string_view ciphertext, absl::string_view associated_data) const {
   Aws::KMS::Model::DecryptRequest req;
+  req.SetKeyId(key_arn_.c_str());
   Aws::Utils::ByteBuffer ciphertext_buffer(
       reinterpret_cast<const unsigned char*>(ciphertext.data()),
       ciphertext.length());
@@ -124,8 +125,8 @@ StatusOr<std::string> AwsKmsAead::Decrypt(
   auto outcome = aws_client_->Decrypt(req);
   if (outcome.IsSuccess()) {
     if (outcome.GetResult().GetKeyId() != Aws::String(key_arn_.c_str())) {
-      return ToStatusF(util::error::INVALID_ARGUMENT,
-                       "AWS KMS decryption failed: wrong key ARN.");
+      return util::Status(util::error::INVALID_ARGUMENT,
+                          "AWS KMS decryption failed: wrong key ARN.");
     }
     auto& buffer = outcome.GetResult().GetPlaintext();
     std::string plaintext(
@@ -136,7 +137,7 @@ StatusOr<std::string> AwsKmsAead::Decrypt(
   auto& err = outcome.GetError();
   return ToStatusF(util::error::INVALID_ARGUMENT,
                    "AWS KMS decryption failed with error: %s",
-                   AwsErrorToString(err).c_str());
+                   AwsErrorToString(err));
 }
 
 }  // namespace awskms

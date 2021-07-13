@@ -30,9 +30,11 @@
 #include "openssl/evp.h"
 #include "openssl/x509.h"
 #include "include/rapidjson/document.h"
+#include "tink/config/tink_fips.h"
 #include "tink/subtle/common_enums.h"
 #include "tink/subtle/ec_util.h"
 #include "tink/subtle/wycheproof_util.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
 #include "tink/util/test_matchers.h"
@@ -46,6 +48,7 @@ using ::crypto::tink::test::IsOk;
 using ::crypto::tink::test::StatusIs;
 using ::testing::IsEmpty;
 using ::testing::Not;
+using ::testing::NotNull;
 using ::testing::StrEq;
 
 struct EncodingTestVector {
@@ -101,10 +104,10 @@ TEST(SubtleUtilBoringSSLTest, EcPointEncode) {
     EXPECT_EQ(1, EC_POINT_set_affine_coordinates_GFp(
                      status_or_group.ValueOrDie(), point.get(), x.get(),
                      y.get(), nullptr));
-    auto status_or_string = SubtleUtilBoringSSL::EcPointEncode(
+    auto encoded_or = SubtleUtilBoringSSL::EcPointEncode(
         test.curve, test.format, point.get());
-    EXPECT_TRUE(status_or_string.ok());
-    EXPECT_EQ(test.encoded_hex, test::HexEncode(status_or_string.ValueOrDie()));
+    EXPECT_TRUE(encoded_or.ok());
+    EXPECT_EQ(test.encoded_hex, test::HexEncode(encoded_or.ValueOrDie()));
   }
 }
 
@@ -142,8 +145,8 @@ TEST(SubtleUtilBoringSSLTest, EcPointDecode) {
 TEST(SubtleUtilBoringSSLTest, Bn2strAndStr2bn) {
   int len = 8;
   std::string bn_str[6] = {"0000000000000000", "0000000000000001",
-                      "1000000000000000", "ffffffffffffffff",
-                      "0fffffffffffffff", "00ffffffffffffff"};
+                           "1000000000000000", "ffffffffffffffff",
+                           "0fffffffffffffff", "00ffffffffffffff"};
   for (const std::string& s : bn_str) {
     auto status_or_bn = SubtleUtilBoringSSL::str2bn(test::HexDecodeOrDie(s));
     EXPECT_TRUE(status_or_bn.ok());
@@ -158,8 +161,12 @@ TEST(SubtleUtilBoringSSLTest, ValidateSignatureHash) {
   EXPECT_TRUE(
       SubtleUtilBoringSSL::ValidateSignatureHash(HashType::SHA256).ok());
   EXPECT_TRUE(
+      SubtleUtilBoringSSL::ValidateSignatureHash(HashType::SHA384).ok());
+  EXPECT_TRUE(
       SubtleUtilBoringSSL::ValidateSignatureHash(HashType::SHA512).ok());
   EXPECT_FALSE(SubtleUtilBoringSSL::ValidateSignatureHash(HashType::SHA1).ok());
+  EXPECT_FALSE(
+      SubtleUtilBoringSSL::ValidateSignatureHash(HashType::SHA224).ok());
   EXPECT_FALSE(
       SubtleUtilBoringSSL::ValidateSignatureHash(HashType::UNKNOWN_HASH).ok());
 }
@@ -193,7 +200,8 @@ bool WycheproofTest(const rapidjson::Value& root) {
       std::string comment = test["comment"].GetString();
       std::string pub_bytes = WycheproofUtil::GetBytes(test["public"]);
       std::string priv_bytes = WycheproofUtil::GetBytes(test["private"]);
-      std::string expected_shared_bytes = WycheproofUtil::GetBytes(test["shared"]);
+      std::string expected_shared_bytes =
+          WycheproofUtil::GetBytes(test["shared"]);
       std::string result = test["result"].GetString();
       EcPointFormat format = EcPointFormat::UNCOMPRESSED;
       for (const rapidjson::Value& flag : test["flags"].GetArray()) {
@@ -245,12 +253,13 @@ bool WycheproofTest(const rapidjson::Value& root) {
       auto status_or_shared = SubtleUtilBoringSSL ::ComputeEcdhSharedSecret(
           curve, priv_key.get(), pub_key.get());
       if (status_or_shared.ok()) {
-        std::string shared = status_or_shared.ValueOrDie();
+        util::SecretData shared = status_or_shared.ValueOrDie();
         if (result == "invalid") {
           ADD_FAILURE() << "Computed shared secret with invalid test vector"
                         << ", tcId= " << id;
           errors++;
-        } else if (shared != expected_shared_bytes) {
+        } else if (util::SecretDataAsStringView(shared) !=
+                   expected_shared_bytes) {
           ADD_FAILURE() << "Computed wrong shared secret with tcId: " << id;
           errors++;
         }
@@ -324,11 +333,21 @@ TEST(CreatesNewRsaKeyPairTest, KeyIsWellFormed) {
                                                     &public_key),
               IsOk());
   auto n = std::move(SubtleUtilBoringSSL::str2bn(private_key.n).ValueOrDie());
-  auto d = std::move(SubtleUtilBoringSSL::str2bn(private_key.d).ValueOrDie());
-  auto p = std::move(SubtleUtilBoringSSL::str2bn(private_key.p).ValueOrDie());
-  auto q = std::move(SubtleUtilBoringSSL::str2bn(private_key.q).ValueOrDie());
-  auto dp = std::move(SubtleUtilBoringSSL::str2bn(private_key.dp).ValueOrDie());
-  auto dq = std::move(SubtleUtilBoringSSL::str2bn(private_key.dq).ValueOrDie());
+  auto d = std::move(
+      SubtleUtilBoringSSL::str2bn(util::SecretDataAsStringView(private_key.d))
+          .ValueOrDie());
+  auto p = std::move(
+      SubtleUtilBoringSSL::str2bn(util::SecretDataAsStringView(private_key.p))
+          .ValueOrDie());
+  auto q = std::move(
+      SubtleUtilBoringSSL::str2bn(util::SecretDataAsStringView(private_key.q))
+          .ValueOrDie());
+  auto dp = std::move(
+      SubtleUtilBoringSSL::str2bn(util::SecretDataAsStringView(private_key.dp))
+          .ValueOrDie());
+  auto dq = std::move(
+      SubtleUtilBoringSSL::str2bn(util::SecretDataAsStringView(private_key.dq))
+          .ValueOrDie());
   bssl::UniquePtr<BN_CTX> ctx(BN_CTX_new());
 
   // Check n = p * q.
@@ -382,7 +401,7 @@ TEST(CreatesNewRsaKeyPairTest, GeneratesDifferentKeysEveryTime) {
     const auto& left = generated_keys[i];
     const auto& right = generated_keys[i + 1];
 
-    // The only fieldthat should be equal.
+    // The only field that should be equal.
     ASSERT_EQ(left.e, right.e);
 
     ASSERT_NE(left.n, right.n);
@@ -396,6 +415,62 @@ TEST(CreatesNewRsaKeyPairTest, GeneratesDifferentKeysEveryTime) {
   }
 }
 
+// Checks if a BIGNUM is equal to a string value.
+bool BignumEqualsString(const BIGNUM* bn, absl::string_view data) {
+  std::string converted =
+      SubtleUtilBoringSSL::bn2str(bn, BN_num_bytes(bn)).ValueOrDie();
+  return converted == data;
+}
+
+// Checks if a BIGNUM is equal to a SecretData value.
+bool BignumEqualsSecretData(const BIGNUM* bn, const util::SecretData& data) {
+  return BignumEqualsString(bn, util::SecretDataAsStringView(data));
+}
+
+TEST(CopiesRsaKeysTest, CopiesRsaPrivateKey) {
+  SubtleUtilBoringSSL::RsaPrivateKey private_key;
+  SubtleUtilBoringSSL::RsaPublicKey public_key;
+  bssl::UniquePtr<BIGNUM> e(BN_new());
+  BN_set_word(e.get(), RSA_F4);
+
+  EXPECT_THAT(SubtleUtilBoringSSL::GetNewRsaKeyPair(2048, e.get(), &private_key,
+                                                    &public_key),
+              IsOk());
+
+  auto rsa_result =
+      SubtleUtilBoringSSL::BoringSslRsaFromRsaPrivateKey(private_key);
+  EXPECT_TRUE(rsa_result.ok());
+  bssl::UniquePtr<RSA> rsa = std::move(rsa_result).ValueOrDie();
+
+  EXPECT_TRUE(BignumEqualsString(rsa->e, private_key.e));
+
+  EXPECT_TRUE(BignumEqualsString(rsa->n, private_key.n));
+  EXPECT_TRUE(BignumEqualsSecretData(rsa->d, private_key.d));
+
+  EXPECT_TRUE(BignumEqualsSecretData(rsa->p, private_key.p));
+  EXPECT_TRUE(BignumEqualsSecretData(rsa->q, private_key.q));
+}
+
+TEST(CopiesRsaKeysTest, CopiesRsaPublicKey) {
+  SubtleUtilBoringSSL::RsaPrivateKey private_key;
+  SubtleUtilBoringSSL::RsaPublicKey public_key;
+  bssl::UniquePtr<BIGNUM> e(BN_new());
+  BN_set_word(e.get(), RSA_F4);
+
+  EXPECT_THAT(SubtleUtilBoringSSL::GetNewRsaKeyPair(2048, e.get(), &private_key,
+                                                    &public_key),
+              IsOk());
+
+  auto rsa_result =
+      SubtleUtilBoringSSL::BoringSslRsaFromRsaPublicKey(public_key);
+  EXPECT_TRUE(rsa_result.ok());
+  bssl::UniquePtr<RSA> rsa = std::move(rsa_result).ValueOrDie();
+
+  EXPECT_TRUE(BignumEqualsString(rsa->e, public_key.e));
+
+  EXPECT_TRUE(BignumEqualsString(rsa->n, public_key.n));
+}
+
 TEST(CreatesNewEd25519KeyPairTest, BoringSSLPrivateKeySuffix) {
   // Generate a new key pair.
   uint8_t out_public_key[ED25519_PUBLIC_KEY_LEN];
@@ -403,9 +478,9 @@ TEST(CreatesNewEd25519KeyPairTest, BoringSSLPrivateKeySuffix) {
 
   ED25519_keypair(out_public_key, out_private_key);
   std::string pk = std::string(reinterpret_cast<const char*>(out_public_key),
-                     ED25519_PUBLIC_KEY_LEN);
+                               ED25519_PUBLIC_KEY_LEN);
   std::string sk = std::string(reinterpret_cast<const char*>(out_private_key),
-                     ED25519_PRIVATE_KEY_LEN);
+                               ED25519_PRIVATE_KEY_LEN);
   ASSERT_EQ(pk.length(), 32);
   ASSERT_EQ(sk.length(), 64);
   // BoringSSL's ED25519_keypair returns a private key with the last 32-bytes
@@ -429,6 +504,132 @@ TEST(CreatesNewEd25519KeyPairTest, GeneratesDifferentKeysEveryTime) {
   ASSERT_NE(keypair1->public_key, keypair1->private_key);
 }
 
+TEST(CreateNewX25519KeyTest, KeyIsWellFormed) {
+  auto ec_key_or_status =
+      SubtleUtilBoringSSL::GetNewEcKey(EllipticCurveType::CURVE25519);
+  ASSERT_THAT(ec_key_or_status.status(), IsOk());
+  auto ec_key = ec_key_or_status.ValueOrDie();
+  EXPECT_EQ(ec_key.curve, EllipticCurveType::CURVE25519);
+  EXPECT_EQ(ec_key.pub_x.length(), X25519_PUBLIC_VALUE_LEN);
+  EXPECT_TRUE(ec_key.pub_y.empty());
+  EXPECT_EQ(ec_key.priv.size(), X25519_PRIVATE_KEY_LEN);
+}
+
+TEST(CreateNewX25519KeyTest, GeneratesDifferentKeysEveryTime) {
+  auto keypair1 = SubtleUtilBoringSSL::GenerateNewX25519Key();
+  auto keypair2 = SubtleUtilBoringSSL::GenerateNewX25519Key();
+
+  EXPECT_FALSE(std::equal(keypair1->private_key,
+                          &keypair1->private_key[X25519_PRIVATE_KEY_LEN],
+                          keypair2->private_key));
+  EXPECT_FALSE(std::equal(keypair1->public_value,
+                          &keypair1->public_value[X25519_PUBLIC_VALUE_LEN],
+                          keypair2->public_value));
+}
+
+TEST(EcKeyFromX25519KeyTest, RoundTripKey) {
+  auto x25519_key = SubtleUtilBoringSSL::GenerateNewX25519Key();
+  ASSERT_THAT(x25519_key, NotNull());
+  auto ec_key = SubtleUtilBoringSSL::EcKeyFromX25519Key(x25519_key.get());
+  ASSERT_EQ(ec_key.curve, EllipticCurveType::CURVE25519);
+
+  auto roundtrip_key_or_status =
+      SubtleUtilBoringSSL::X25519KeyFromEcKey(ec_key);
+  ASSERT_THAT(roundtrip_key_or_status.status(), IsOk());
+
+  auto roundtrip_key = std::move(roundtrip_key_or_status.ValueOrDie());
+  EXPECT_TRUE(std::equal(x25519_key->private_key,
+                         &x25519_key->private_key[X25519_PRIVATE_KEY_LEN],
+                         roundtrip_key->private_key));
+  EXPECT_TRUE(std::equal(x25519_key->public_value,
+                         &x25519_key->public_value[X25519_PUBLIC_VALUE_LEN],
+                         roundtrip_key->public_value));
+}
+
+TEST(X25519KeyFromEcKeyTest, RejectNistPCurves) {
+  auto ec_key_or_status =
+      SubtleUtilBoringSSL::GetNewEcKey(EllipticCurveType::NIST_P256);
+  ASSERT_THAT(ec_key_or_status.status(), IsOk());
+
+  auto x25519_key_or_status =
+      SubtleUtilBoringSSL::X25519KeyFromEcKey(ec_key_or_status.ValueOrDie());
+  EXPECT_THAT(x25519_key_or_status.status(),
+              StatusIs(util::error::INVALID_ARGUMENT));
+}
+
+
+using NistCurveParamTest = ::testing::TestWithParam<EllipticCurveType>;
+INSTANTIATE_TEST_SUITE_P(
+    NistCurvesParams, NistCurveParamTest,
+    ::testing::Values(NIST_P256, NIST_P384, NIST_P521));
+
+TEST_P(NistCurveParamTest, KeysFromDifferentSeedAreDifferent) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+
+  util::SecretData seed1 = util::SecretDataFromStringView(
+      test::HexDecodeOrDie("000102030405060708090a0b0c0d0e0f"));
+  util::SecretData seed2 = util::SecretDataFromStringView(
+      test::HexDecodeOrDie("0f0e0d0c0b0a09080706050403020100"));
+
+  crypto::tink::subtle::EllipticCurveType curve = GetParam();
+
+  crypto::tink::util::StatusOr<SubtleUtilBoringSSL::EcKey> keypair1 =
+      SubtleUtilBoringSSL::GetNewEcKeyFromSeed(curve, seed1);
+  crypto::tink::util::StatusOr<SubtleUtilBoringSSL::EcKey> keypair2 =
+      SubtleUtilBoringSSL::GetNewEcKeyFromSeed(curve, seed2);
+
+  ASSERT_THAT(keypair1.status(), IsOk());
+  ASSERT_THAT(keypair2.status(), IsOk());
+
+  EXPECT_NE(keypair1->priv, keypair2->priv);
+  EXPECT_NE(keypair1->pub_x, keypair2->pub_x);
+  EXPECT_NE(keypair1->pub_y, keypair2->pub_y);
+}
+
+
+TEST_P(NistCurveParamTest, SameSeedGivesSameKey) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+
+  util::SecretData seed1 = util::SecretDataFromStringView(
+      test::HexDecodeOrDie("000102030405060708090a0b0c0d0e0f"));
+
+  auto curve = GetParam();
+
+  auto keypair1_or_status = SubtleUtilBoringSSL::GetNewEcKeyFromSeed(
+      curve, seed1);
+  auto keypair2_or_status = SubtleUtilBoringSSL::GetNewEcKeyFromSeed(
+      curve, seed1);
+
+  ASSERT_THAT(keypair1_or_status.status(), IsOk());
+  ASSERT_THAT(keypair2_or_status.status(), IsOk());
+
+  auto keypair1 = keypair1_or_status.ValueOrDie();
+  auto keypair2 = keypair2_or_status.ValueOrDie();
+
+  EXPECT_EQ(keypair1.priv, keypair2.priv);
+  EXPECT_EQ(keypair1.pub_x, keypair2.pub_x);
+  EXPECT_EQ(keypair1.pub_y, keypair2.pub_y);
+}
+
+TEST(SubtleUtilBoringSSLTest, GenerationWithSeedFailsWithWrongCurve) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+
+  util::SecretData seed = util::SecretDataFromStringView(
+      test::HexDecodeOrDie("000102030405060708090a0b0c0d0e0f"));
+
+  auto keypair_or_status = SubtleUtilBoringSSL::GetNewEcKeyFromSeed(
+      EllipticCurveType::CURVE25519, seed);
+
+  EXPECT_THAT(keypair_or_status.status(), StatusIs(util::error::INTERNAL));
+}
+
+
 TEST(SubtleUtilBoringSSLTest, ValidateRsaModulusSize) {
   SubtleUtilBoringSSL::RsaPublicKey public_key;
   SubtleUtilBoringSSL::RsaPrivateKey private_key;
@@ -451,6 +652,33 @@ TEST(SubtleUtilBoringSSLTest, ValidateRsaModulusSize) {
   ASSERT_THAT(
       SubtleUtilBoringSSL::ValidateRsaModulusSize(BN_num_bits(n_1024.get())),
       Not(IsOk()));
+}
+
+static const std::vector<BN_ULONG>* public_exponent_fail_tests =
+    new std::vector<BN_ULONG>({2, 3, 4, 65536, 65538});
+
+TEST(SubtleUtilBoringSSLTest, ValidateRsaPublicExponent) {
+  SubtleUtilBoringSSL::RsaPublicKey public_key;
+  SubtleUtilBoringSSL::RsaPrivateKey private_key;
+  bssl::UniquePtr<BIGNUM> e_bn(BN_new());
+
+  for (const BN_ULONG test : *public_exponent_fail_tests) {
+    BN_set_word(e_bn.get(), test);
+    auto e_str = SubtleUtilBoringSSL::bn2str(e_bn.get(),
+                                             BN_num_bytes(e_bn.get()));
+    EXPECT_TRUE(e_str.ok());
+    ASSERT_THAT(
+      SubtleUtilBoringSSL::ValidateRsaPublicExponent(e_str.ValueOrDie()),
+      Not(IsOk()));
+  }
+
+  BN_set_word(e_bn.get(), RSA_F4);
+  auto e_str = SubtleUtilBoringSSL::bn2str(e_bn.get(),
+                                           BN_num_bytes(e_bn.get()));
+  EXPECT_TRUE(e_str.ok());
+  ASSERT_THAT(
+      SubtleUtilBoringSSL::ValidateRsaPublicExponent(e_str.ValueOrDie()),
+      IsOk());
 }
 
 TEST(SublteUtilBoringSSLTest, GetCipherForKeySize) {
@@ -509,7 +737,7 @@ TEST_P(ComputeHashSamplesTest, ComputesHash) {
   auto hash_or = boringssl::ComputeHash(data, *hasher);
   ASSERT_THAT(hash_or.status(), IsOk());
   std::string hash(reinterpret_cast<char*>(hash_or.ValueOrDie().data()),
-              hash_or.ValueOrDie().size());
+                   hash_or.ValueOrDie().size());
   EXPECT_THAT(hash, StrEq(expected_hash));
 }
 

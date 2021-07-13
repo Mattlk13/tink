@@ -1,3 +1,5 @@
+// Copyright 2018 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -20,12 +22,12 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/google/tink/go/aead/subtle"
 	"github.com/google/tink/go/core/registry"
-	subteAEAD "github.com/google/tink/go/subtle/aead"
 	"github.com/google/tink/go/subtle/random"
 	"github.com/google/tink/go/testutil"
-	gcmpb "github.com/google/tink/proto/aes_gcm_go_proto"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	gcmpb "github.com/google/tink/go/proto/aes_gcm_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 var keySizes = []uint32{16, 32}
@@ -241,7 +243,7 @@ func validateAESGCMKey(key *gcmpb.AesGcmKey, format *gcmpb.AesGcmKeyFormat) erro
 		return fmt.Errorf("incorrect key version")
 	}
 	// try to encrypt and decrypt
-	p, err := subteAEAD.NewAESGCM(key.KeyValue)
+	p, err := subtle.NewAESGCM(key.KeyValue)
 	if err != nil {
 		return fmt.Errorf("invalid key")
 	}
@@ -249,7 +251,7 @@ func validateAESGCMKey(key *gcmpb.AesGcmKey, format *gcmpb.AesGcmKeyFormat) erro
 }
 
 func validateAESGCMPrimitive(p interface{}, key *gcmpb.AesGcmKey) error {
-	cipher := p.(*subteAEAD.AESGCM)
+	cipher := p.(*subtle.AESGCM)
 	if !bytes.Equal(cipher.Key, key.KeyValue) {
 		return fmt.Errorf("key and primitive don't match")
 	}

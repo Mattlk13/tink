@@ -1,128 +1,53 @@
-package(
-    default_visibility = [
-        "//tools/build_defs:internal_pkg",
-    ],
-)
+load("@npm//@bazel/typescript:index.bzl", "ts_library")
 
-licenses(["notice"])
+package(default_visibility = ["//:__subpackages__"])
 
-load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_library")
-
-closure_js_library(
+ts_library(
     name = "aead",
-    exports = [
-        ":aead_config",
-        ":aead_key_templates",
-        ":aead_wrapper",
-        ":aes_ctr_hmac_aead_key_manager",
-        ":aes_gcm_key_manager",
-    ],
-)
-
-closure_js_library(
-    name = "aes_ctr_hmac_aead_key_manager",
     srcs = [
-        "aes_ctr_hmac_aead_key_manager.js",
+        "aead.ts",
+        "aead_config.ts",
+        "aead_key_templates.ts",
+        "aead_wrapper.ts",
+        "aes_ctr_hmac.ts",
+        "aes_ctr_hmac_aead_key_manager.ts",
+        "aes_ctr_hmac_aead_key_templates.ts",
+        "aes_gcm.ts",
+        "aes_gcm_key_manager.ts",
+        "aes_gcm_key_templates.ts",
+        "index.ts",
+        "wrapper.ts",
     ],
+    module_name = "tink-crypto/aead",
     deps = [
-        "//javascript:key_manager",
-        "//javascript:primitives",
-        "//javascript/exception",
-        "//javascript/subtle",
-        "//javascript/subtle:aead",
-        "//proto:aes_ctr_closure_proto",
-        "//proto:aes_ctr_hmac_aead_closure_proto",
-        "//proto:common_closure_proto",
-        "//proto:hmac_closure_proto",
-        "//proto:tink_closure_proto",
-        "@io_bazel_rules_closure//closure/library",
+        "//aead/internal",
+        "//exception",
+        "//internal",
+        "//internal:proto",
+        "//subtle",
     ],
 )
 
-closure_js_library(
-    name = "aes_gcm_key_manager",
+ts_library(
+    name = "aead_tests",
+    testonly = True,
     srcs = [
-        "aes_gcm_key_manager.js",
+        "aead_config_test.ts",
+        "aead_key_templates_test.ts",
+        "aead_wrapper_test.ts",
+        "aes_ctr_hmac_aead_key_manager_test.ts",
+        "aes_ctr_hmac_aead_key_templates_test.ts",
+        "aes_gcm_key_manager_test.ts",
+        "aes_gcm_key_templates_test.ts",
     ],
     deps = [
-        "//javascript:key_manager",
-        "//javascript:primitives",
-        "//javascript/exception",
-        "//javascript/subtle",
-        "//javascript/subtle:aead",
-        "//proto:aes_gcm_closure_proto",
-        "//proto:tink_closure_proto",
-        "@io_bazel_rules_closure//closure/library",
-        "@io_bazel_rules_closure//closure/protobuf:jspb",
-    ],
-)
-
-closure_js_library(
-    name = "aead_key_templates",
-    srcs = [
-        "aead_key_templates.js",
-    ],
-    deps = [
-        ":aead_config",
-        "//proto:aes_ctr_closure_proto",
-        "//proto:aes_ctr_hmac_aead_closure_proto",
-        "//proto:aes_gcm_closure_proto",
-        "//proto:common_closure_proto",
-        "//proto:hmac_closure_proto",
-        "//proto:tink_closure_proto",
-        "@io_bazel_rules_closure//closure/library",
-    ],
-)
-
-closure_js_library(
-    name = "aead_config",
-    srcs = [
-        "aead_config.js",
-    ],
-    deps = [
-        ":aead_wrapper",
-        ":aes_ctr_hmac_aead_key_manager",
-        ":aes_gcm_key_manager",
-        "//javascript:registry",
-        "@io_bazel_rules_closure//closure/library",
-    ],
-)
-
-closure_js_library(
-    name = "aead_wrapper",
-    srcs = [
-        "aead_wrapper.js",
-    ],
-    deps = [
-        "//javascript:crypto_format",
-        "//javascript:primitive_set",
-        "//javascript:primitive_wrapper",
-        "//javascript:primitives",
-        "//javascript/exception",
-        "//proto:tink_closure_proto",
-        "@io_bazel_rules_closure//closure/library",
-    ],
-)
-
-# test
-
-closure_js_library(
-    name = "test_lib",
-    testonly = 1,
-    srcs = glob([
-        "*_test.js",
-    ]),
-    deps = [
-        "//proto:aes_ctr_closure_proto",
-        "//proto:aes_ctr_hmac_aead_closure_proto",
-        "//proto:aes_gcm_closure_proto",
-        "//proto:common_closure_proto",
-        "//proto:hmac_closure_proto",
-        "//proto:tink_closure_proto",
-        "@io_bazel_rules_closure//closure/library",
-        "@io_bazel_rules_closure//closure/library/testing:asserts",
-        "@io_bazel_rules_closure//closure/library/testing:jsunit",
-        "@io_bazel_rules_closure//closure/library/testing:testsuite",
-        "@io_bazel_rules_closure//closure/library/useragent",
+        ":aead",
+        "//aead/internal",
+        "//exception",
+        "//internal",
+        "//internal:proto",
+        "//subtle",
+        "//testing/internal",
+        "@npm//@types/jasmine",
     ],
 )

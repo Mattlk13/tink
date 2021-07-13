@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -70,14 +72,14 @@ class ExamplePrivateKeyTypeManager
     return google::crypto::tink::KeyData::ASYMMETRIC_PRIVATE;
   }
 
-  MOCK_CONST_METHOD0(get_version, uint32_t());
+  MOCK_METHOD(uint32_t, get_version, (), (const, override));
 
   // We mock out ValidateKey and ValidateKeyFormat so that we can easily test
   // proper behavior in case they return an error.
-  MOCK_CONST_METHOD1(ValidateKey,
-                     crypto::tink::util::Status(const EcdsaPrivateKey& key));
-  MOCK_CONST_METHOD1(ValidateKeyFormat,
-                     crypto::tink::util::Status(const EcdsaKeyFormat& key));
+  MOCK_METHOD(crypto::tink::util::Status, ValidateKey,
+              (const EcdsaPrivateKey& key), (const, override));
+  MOCK_METHOD(crypto::tink::util::Status, ValidateKeyFormat,
+              (const EcdsaKeyFormat& key), (const, override));
 
   const std::string& get_key_type() const override { return kKeyType; }
 
@@ -119,12 +121,12 @@ class TestPublicKeyTypeManager
     return google::crypto::tink::KeyData::ASYMMETRIC_PRIVATE;
   }
 
-  MOCK_CONST_METHOD0(get_version, uint32_t());
+  MOCK_METHOD(uint32_t, get_version, (), (const, override));
 
   // We mock out ValidateKey and ValidateKeyFormat so that we can easily test
   // proper behavior in case they return an error.
-  MOCK_CONST_METHOD1(ValidateKey,
-                     crypto::tink::util::Status(const EcdsaPublicKey& key));
+  MOCK_METHOD(crypto::tink::util::Status, ValidateKey,
+              (const EcdsaPublicKey& key), (const, override));
 
   const std::string& get_key_type() const override { return kKeyType; }
 
@@ -171,8 +173,8 @@ TEST(PrivateKeyManagerImplTest, GetPublicKeyDataValidatePrivateKey) {
   ExamplePrivateKeyTypeManager private_km;
   TestPublicKeyTypeManager public_km;
   EXPECT_CALL(private_km, ValidateKey)
-      .WillOnce(Return(ToStatusF(util::error::OUT_OF_RANGE,
-                                 "GetPublicKeyDataValidatePrivateKey")));
+      .WillOnce(Return(util::Status(util::error::OUT_OF_RANGE,
+                                    "GetPublicKeyDataValidatePrivateKey")));
 
   std::unique_ptr<KeyManager<PrivatePrimitive>> key_manager =
       MakePrivateKeyManager<PrivatePrimitive>(&private_km, &public_km);

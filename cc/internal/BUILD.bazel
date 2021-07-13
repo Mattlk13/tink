@@ -1,0 +1,171 @@
+package(default_visibility = ["//:__subpackages__"])
+
+licenses(["notice"])
+
+cc_library(
+    name = "keyset_wrapper",
+    hdrs = ["keyset_wrapper.h"],
+    include_prefix = "tink/internal",
+    deps = [
+        "//proto:tink_cc_proto",
+        "//util:statusor",
+    ],
+)
+
+cc_library(
+    name = "keyset_wrapper_impl",
+    hdrs = ["keyset_wrapper_impl.h"],
+    include_prefix = "tink/internal",
+    deps = [
+        ":key_info",
+        ":keyset_wrapper",
+        "//:primitive_set",
+        "//:primitive_wrapper",
+        "//proto:tink_cc_proto",
+        "//util:statusor",
+        "//util:validation",
+    ],
+)
+
+cc_library(
+    name = "key_info",
+    srcs = ["key_info.cc"],
+    hdrs = ["key_info.h"],
+    include_prefix = "tink/internal",
+    deps = [
+        "//proto:tink_cc_proto",
+    ],
+)
+
+cc_library(
+    name = "registry_impl",
+    srcs = ["registry_impl.cc"],
+    hdrs = ["registry_impl.h"],
+    include_prefix = "tink/internal",
+    deps = [
+        "//:catalogue",
+        "//:core/key_manager_impl",
+        "//:core/key_type_manager",
+        "//:core/private_key_manager_impl",
+        "//:core/private_key_type_manager",
+        "//:key_manager",
+        "//:primitive_set",
+        "//:primitive_wrapper",
+        ":fips_utils",
+        ":keyset_wrapper",
+        ":keyset_wrapper_impl",
+        "//proto:tink_cc_proto",
+        "//util:errors",
+        "//util:protobuf_helper",
+        "//util:status",
+        "//util:statusor",
+        "//util:validation",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/types:optional",
+    ],
+)
+
+config_setting(
+    name = "fips_enabled",
+    flag_values = {"//config:use_only_fips": "True"},
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "fips_utils",
+    srcs = ["fips_utils.cc"],
+    hdrs = ["fips_utils.h"],
+    include_prefix = "tink/internal",
+    defines = select({
+        "fips_enabled": ["TINK_USE_ONLY_FIPS"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        "//util:status",
+        "@com_google_absl//absl/base:core_headers",
+        "@boringssl//:crypto",
+    ],
+)
+
+
+cc_test(
+    name = "keyset_wrapper_impl_test",
+    srcs = ["keyset_wrapper_impl_test.cc"],
+    deps = [
+        ":keyset_wrapper_impl",
+        "//:primitive_wrapper",
+        "//proto:tink_cc_proto",
+        "//util:test_matchers",
+        "//util:test_util",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "key_info_test",
+    srcs = ["key_info_test.cc"],
+    deps = [
+        ":key_info",
+        "//proto:tink_cc_proto",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "registry_impl_test",
+    size = "small",
+    srcs = ["registry_impl_test.cc"],
+    copts = ["-Iexternal/gtest/include"],
+    deps = [
+        "//:aead",
+        "//:catalogue",
+        "//:core/key_manager_impl",
+        "//:core/key_type_manager",
+        "//:crypto_format",
+        "//:keyset_manager",
+        "//:registry",
+        "//aead:aead_wrapper",
+        "//aead:aes_gcm_key_manager",
+        "//config:tink_fips",
+        "//hybrid:ecies_aead_hkdf_private_key_manager",
+        "//hybrid:ecies_aead_hkdf_public_key_manager",
+        "//proto:aes_ctr_hmac_aead_cc_proto",
+        "//proto:aes_gcm_cc_proto",
+        "//proto:common_cc_proto",
+        "//proto:ecdsa_cc_proto",
+        "//proto:tink_cc_proto",
+        "//subtle:aes_gcm_boringssl",
+        "//subtle:random",
+        "//util:istream_input_stream",
+        "//util:protobuf_helper",
+        "//util:secret_data",
+        "//util:status",
+        "//util:statusor",
+        "//util:test_keyset_handle",
+        "//util:test_matchers",
+        "//util:test_util",
+        "@boringssl//:crypto",
+        "@com_google_absl//absl/memory",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "fips_utils_test",
+    size = "small",
+    srcs = ["fips_utils_test.cc"],
+    deps = [
+        ":fips_utils",
+        "//util:status",
+        "//util:test_matchers",
+        "@boringssl//:crypto",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+

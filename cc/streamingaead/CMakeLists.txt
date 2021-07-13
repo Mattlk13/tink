@@ -31,6 +31,7 @@ tink_cc_library(
   DEPS
     absl::memory
     tink::config::config_util
+    tink::config::tink_fips
     tink::core::registry
     tink::proto::config_cc_proto
     tink::streamingaead::aes_ctr_hmac_streaming_key_manager
@@ -58,6 +59,7 @@ tink_cc_library(
     aes_gcm_hkdf_streaming_key_manager.cc
     aes_gcm_hkdf_streaming_key_manager.h
   DEPS
+    absl::memory
     absl::strings
     tink::core::key_manager
     tink::core::key_type_manager
@@ -70,7 +72,9 @@ tink_cc_library(
     tink::util::constants
     tink::util::enums
     tink::util::errors
+    tink::util::input_stream_util
     tink::util::protobuf_helper
+    tink::util::secret_data
     tink::util::status
     tink::util::statusor
     tink::util::validation
@@ -82,6 +86,7 @@ tink_cc_library(
     aes_ctr_hmac_streaming_key_manager.cc
     aes_ctr_hmac_streaming_key_manager.h
   DEPS
+    absl::memory
     absl::strings
     tink::core::key_manager
     tink::core::key_type_manager
@@ -93,7 +98,9 @@ tink_cc_library(
     tink::util::constants
     tink::util::enums
     tink::util::errors
+    tink::util::input_stream_util
     tink::util::protobuf_helper
+    tink::util::secret_data
     tink::util::status
     tink::util::statusor
     tink::util::validation
@@ -213,6 +220,7 @@ tink_cc_test(
     tink::subtle::test_util
     tink::util::istream_input_stream
     tink::util::ostream_output_stream
+    tink::util::secret_data
     tink::util::status
     tink::util::statusor
     tink::util::test_matchers
@@ -236,6 +244,7 @@ tink_cc_test(
     tink::subtle::test_util
     tink::util::istream_input_stream
     tink::util::ostream_output_stream
+    tink::util::secret_data
     tink::util::status
     tink::util::statusor
     tink::util::test_matchers
@@ -260,6 +269,7 @@ tink_cc_test(
   SRCS streaming_aead_config_test.cc
   DEPS
     absl::memory
+    tink::config::tink_fips
     tink::core::config
     tink::core::keyset_handle
     tink::core::registry

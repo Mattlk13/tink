@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -18,13 +20,12 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/google/tink/go/daead/subtle"
 	"github.com/google/tink/go/keyset"
-	"github.com/google/tink/go/core/registry"
-	"github.com/google/tink/go/subtle/daead"
 	"github.com/google/tink/go/subtle/random"
 
-	aspb "github.com/google/tink/proto/aes_siv_go_proto"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	aspb "github.com/google/tink/go/proto/aes_siv_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 const (
@@ -35,9 +36,6 @@ const (
 // aesSIVKeyManager is an implementation of KeyManager interface.
 // It generates new AesSivKey keys and produces new instances of AESSIV subtle.
 type aesSIVKeyManager struct{}
-
-// Assert that aesSIVKeyManager implements the KeyManager interface.
-var _ registry.KeyManager = (*aesSIVKeyManager)(nil)
 
 // newAESSIVKeyManager creates a new aesSIVKeyManager.
 func newAESSIVKeyManager() *aesSIVKeyManager {
@@ -57,24 +55,41 @@ func (km *aesSIVKeyManager) Primitive(serializedKey []byte) (interface{}, error)
 	if err := km.validateKey(key); err != nil {
 		return nil, err
 	}
-	ret, err := daead.NewAESSIV(key.KeyValue)
+	ret, err := subtle.NewAESSIV(key.KeyValue)
 	if err != nil {
 		return nil, fmt.Errorf("aes_siv_key_manager: cannot create new primitive: %s", err)
 	}
 	return ret, nil
 }
 
-// NewKey creates a new key, ignoring the specification in the given serialized key format
-// because the key size and other params are fixed.
+// NewKey creates a new key. serializedKeyFormat is not required, because there is only one
+// valid key format.
 func (km *aesSIVKeyManager) NewKey(serializedKeyFormat []byte) (proto.Message, error) {
-	return km.newAesSivKey(), nil
+	if serializedKeyFormat != nil {
+		keyFormat := new(aspb.AesSivKeyFormat)
+		if err := proto.Unmarshal(serializedKeyFormat, keyFormat); err != nil {
+			return nil, fmt.Errorf("aes_siv_key_manager: invalid key format")
+		}
+		if keyFormat.KeySize != subtle.AESSIVKeySize {
+			return nil, fmt.Errorf("aes_siv_key_manager: keyFormat.KeySize != %d", subtle.AESSIVKeySize)
+		}
+	}
+	keyValue := random.GetRandomBytes(subtle.AESSIVKeySize)
+	key := &aspb.AesSivKey{
+		Version:  aesSIVKeyVersion,
+		KeyValue: keyValue,
+	}
+	return key, nil
 }
 
-// NewKeyData creates a new KeyData, ignoring the specification in the given serialized key format
-// because the key size and other params are fixed.
+// NewKeyData creates a new KeyData. serializedKeyFormat is not required, because there is only one
+// valid key format.
 // It should be used solely by the key management API.
 func (km *aesSIVKeyManager) NewKeyData(serializedKeyFormat []byte) (*tinkpb.KeyData, error) {
-	key := km.newAesSivKey()
+	key, err := km.NewKey(serializedKeyFormat)
+	if err != nil {
+		return nil, err
+	}
 	serializedKey, err := proto.Marshal(key)
 	if err != nil {
 		return nil, err
@@ -103,17 +118,8 @@ func (km *aesSIVKeyManager) validateKey(key *aspb.AesSivKey) error {
 		return fmt.Errorf("aes_siv_key_manager: %s", err)
 	}
 	keySize := uint32(len(key.KeyValue))
-	if keySize != daead.AESSIVKeySize {
-		return fmt.Errorf("aes_siv_key_manager: keySize != %d", daead.AESSIVKeySize)
+	if keySize != subtle.AESSIVKeySize {
+		return fmt.Errorf("aes_siv_key_manager: keySize != %d", subtle.AESSIVKeySize)
 	}
 	return nil
-}
-
-// newAesSivKey creates a new AesSivKey.
-func (km *aesSIVKeyManager) newAesSivKey() *aspb.AesSivKey {
-	keyValue := random.GetRandomBytes(daead.AESSIVKeySize)
-	return &aspb.AesSivKey{
-		Version:  aesSIVKeyVersion,
-		KeyValue: keyValue,
-	}
 }

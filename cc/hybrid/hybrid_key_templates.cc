@@ -18,8 +18,9 @@
 
 #include "absl/strings/string_view.h"
 #include "tink/aead/aead_key_templates.h"
-#include "proto/ecies_aead_hkdf.pb.h"
+#include "tink/daead/deterministic_aead_key_templates.h"
 #include "proto/common.pb.h"
+#include "proto/ecies_aead_hkdf.pb.h"
 #include "proto/tink.pb.h"
 
 namespace crypto {
@@ -38,11 +39,12 @@ KeyTemplate* NewEciesAeadHkdfKeyTemplate(
     HashType hkdf_hash_type,
     EcPointFormat ec_point_format,
     const KeyTemplate& dem_key_template,
+    OutputPrefixType prefix_type,
     absl::string_view hkdf_salt) {
   KeyTemplate* key_template = new KeyTemplate;
   key_template->set_type_url(
       "type.googleapis.com/google.crypto.tink.EciesAeadHkdfPrivateKey");
-  key_template->set_output_prefix_type(OutputPrefixType::TINK);
+  key_template->set_output_prefix_type(prefix_type);
   EciesAeadHkdfKeyFormat key_format;
   key_format.mutable_params()->set_ec_point_format(ec_point_format);
   auto dem_params = key_format.mutable_params()->mutable_dem_params();
@@ -64,6 +66,30 @@ const KeyTemplate& HybridKeyTemplates::EciesP256HkdfHmacSha256Aes128Gcm() {
                                   HashType::SHA256,
                                   EcPointFormat::UNCOMPRESSED,
                                   AeadKeyTemplates::Aes128Gcm(),
+                                  OutputPrefixType::TINK,
+                                  /* hkdf_salt= */ "");
+  return *key_template;
+}
+
+// static
+const KeyTemplate& HybridKeyTemplates::EciesP256HkdfHmacSha512Aes128Gcm() {
+  static const KeyTemplate* key_template = NewEciesAeadHkdfKeyTemplate(
+      EllipticCurveType::NIST_P256, HashType::SHA512,
+      EcPointFormat::UNCOMPRESSED, AeadKeyTemplates::Aes128Gcm(),
+      OutputPrefixType::TINK,
+      /* hkdf_salt= */ "");
+  return *key_template;
+}
+
+// static
+const KeyTemplate&
+HybridKeyTemplates::EciesP256HkdfHmacSha256Aes128GcmCompressedWithoutPrefix() {
+  static const KeyTemplate* key_template =
+      NewEciesAeadHkdfKeyTemplate(EllipticCurveType::NIST_P256,
+                                  HashType::SHA256,
+                                  EcPointFormat::COMPRESSED,
+                                  AeadKeyTemplates::Aes128Gcm(),
+                                  OutputPrefixType::RAW,
                                   /* hkdf_salt= */ "");
   return *key_template;
 }
@@ -76,7 +102,19 @@ HybridKeyTemplates::EciesP256HkdfHmacSha256Aes128CtrHmacSha256() {
                                   HashType::SHA256,
                                   EcPointFormat::UNCOMPRESSED,
                                   AeadKeyTemplates::Aes128CtrHmacSha256(),
+                                  OutputPrefixType::TINK,
                                   /* hkdf_salt= */ "");
+  return *key_template;
+}
+
+// static
+const KeyTemplate&
+HybridKeyTemplates::EciesP256HkdfHmacSha512Aes128CtrHmacSha256() {
+  static const KeyTemplate* key_template = NewEciesAeadHkdfKeyTemplate(
+      EllipticCurveType::NIST_P256, HashType::SHA512,
+      EcPointFormat::UNCOMPRESSED, AeadKeyTemplates::Aes128CtrHmacSha256(),
+      OutputPrefixType::TINK,
+      /* hkdf_salt= */ "");
   return *key_template;
 }
 
@@ -86,6 +124,7 @@ HybridKeyTemplates::EciesP256CompressedHkdfHmacSha256Aes128Gcm() {
   static const KeyTemplate* key_template = NewEciesAeadHkdfKeyTemplate(
       EllipticCurveType::NIST_P256, HashType::SHA256, EcPointFormat::COMPRESSED,
       AeadKeyTemplates::Aes128Gcm(),
+      OutputPrefixType::TINK,
       /* hkdf_salt= */ "");
   return *key_template;
 }
@@ -96,6 +135,50 @@ HybridKeyTemplates::EciesP256CompressedHkdfHmacSha256Aes128CtrHmacSha256() {
   static const KeyTemplate* key_template = NewEciesAeadHkdfKeyTemplate(
       EllipticCurveType::NIST_P256, HashType::SHA256, EcPointFormat::COMPRESSED,
       AeadKeyTemplates::Aes128CtrHmacSha256(),
+      OutputPrefixType::TINK,
+      /* hkdf_salt= */ "");
+  return *key_template;
+}
+
+// static
+const KeyTemplate& HybridKeyTemplates::EciesX25519HkdfHmacSha256Aes128Gcm() {
+  static const KeyTemplate* key_template = NewEciesAeadHkdfKeyTemplate(
+      EllipticCurveType::CURVE25519, HashType::SHA256,
+      EcPointFormat::COMPRESSED, AeadKeyTemplates::Aes128Gcm(),
+      OutputPrefixType::TINK,
+      /* hkdf_salt= */ "");
+  return *key_template;
+}
+
+// static
+const KeyTemplate&
+HybridKeyTemplates::EciesX25519HkdfHmacSha256Aes128CtrHmacSha256() {
+  static const KeyTemplate* key_template = NewEciesAeadHkdfKeyTemplate(
+      EllipticCurveType::CURVE25519, HashType::SHA256,
+      EcPointFormat::COMPRESSED, AeadKeyTemplates::Aes128CtrHmacSha256(),
+      OutputPrefixType::TINK,
+      /* hkdf_salt= */ "");
+  return *key_template;
+}
+
+// static
+const KeyTemplate&
+HybridKeyTemplates::EciesX25519HkdfHmacSha256XChaCha20Poly1305() {
+  static const KeyTemplate* key_template = NewEciesAeadHkdfKeyTemplate(
+      EllipticCurveType::CURVE25519, HashType::SHA256,
+      EcPointFormat::COMPRESSED, AeadKeyTemplates::XChaCha20Poly1305(),
+      OutputPrefixType::TINK,
+      /* hkdf_salt= */ "");
+  return *key_template;
+}
+
+// static
+const KeyTemplate&
+HybridKeyTemplates::EciesX25519HkdfHmacSha256DeterministicAesSiv() {
+  static const KeyTemplate* key_template = NewEciesAeadHkdfKeyTemplate(
+      EllipticCurveType::CURVE25519, HashType::SHA256,
+      EcPointFormat::COMPRESSED, DeterministicAeadKeyTemplates::Aes256Siv(),
+      OutputPrefixType::TINK,
       /* hkdf_salt= */ "");
   return *key_template;
 }

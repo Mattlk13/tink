@@ -19,7 +19,10 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "tink/aead.h"
+#include "tink/aead/internal/cord_aes_gcm_boringssl.h"
 #include "tink/subtle/aead_test_util.h"
+#include "tink/util/istream_input_stream.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
 #include "tink/util/test_matchers.h"
@@ -32,10 +35,12 @@ namespace {
 
 using ::crypto::tink::test::IsOk;
 using ::crypto::tink::test::StatusIs;
+using ::crypto::tink::util::IstreamInputStream;
 using ::crypto::tink::util::StatusOr;
 using ::google::crypto::tink::AesGcmKey;
 using ::google::crypto::tink::AesGcmKeyFormat;
 using ::testing::Eq;
+using ::testing::HasSubstr;
 
 TEST(AesGcmKeyManagerTest, Basics) {
   EXPECT_THAT(AesGcmKeyManager().get_version(), Eq(0));
@@ -170,15 +175,91 @@ TEST(AesGcmKeyManagerTest, CreateAead) {
   ASSERT_THAT(aead_or.status(), IsOk());
 
   StatusOr<std::unique_ptr<Aead>> boring_ssl_aead_or =
-      subtle::AesGcmBoringSsl::New(key_or.ValueOrDie().key_value());
+      subtle::AesGcmBoringSsl::New(
+          util::SecretDataFromStringView(key_or.ValueOrDie().key_value()));
   ASSERT_THAT(boring_ssl_aead_or.status(), IsOk());
 
-  ASSERT_THAT(EncryptThenDecrypt(aead_or.ValueOrDie().get(),
-                                 boring_ssl_aead_or.ValueOrDie().get(),
+  ASSERT_THAT(EncryptThenDecrypt(*aead_or.ValueOrDie(),
+                                 *boring_ssl_aead_or.ValueOrDie(),
                                  "message", "aad"),
               IsOk());
 }
 
+TEST(AesGcmKeyManagerTest, CreateCordAead) {
+  AesGcmKeyFormat format;
+  format.set_key_size(32);
+  StatusOr<AesGcmKey> key_or = AesGcmKeyManager().CreateKey(format);
+  ASSERT_THAT(key_or.status(), IsOk());
+
+  StatusOr<std::unique_ptr<CordAead>> aead_or =
+      AesGcmKeyManager().GetPrimitive<CordAead>(key_or.ValueOrDie());
+
+  ASSERT_THAT(aead_or.status(), IsOk());
+
+  StatusOr<std::unique_ptr<CordAead>> boring_ssl_aead_or =
+      crypto::tink::CordAesGcmBoringSsl::New(
+          util::SecretDataFromStringView(key_or.ValueOrDie().key_value()));
+  ASSERT_THAT(boring_ssl_aead_or.status(), IsOk());
+
+  ASSERT_THAT(EncryptThenDecrypt(*aead_or.ValueOrDie(),
+                                 *boring_ssl_aead_or.ValueOrDie(),
+                                 "message", "aad"),
+              IsOk());
+}
+
+TEST(AesGcmKeyManagerTest, DeriveShortKey) {
+  AesGcmKeyFormat format;
+  format.set_key_size(16);
+  format.set_version(0);
+
+  IstreamInputStream input_stream{
+      absl::make_unique<std::stringstream>("0123456789abcdefghijklmnop")};
+
+  StatusOr<AesGcmKey> key_or =
+      AesGcmKeyManager().DeriveKey(format, &input_stream);
+  ASSERT_THAT(key_or.status(), IsOk());
+  EXPECT_THAT(key_or.ValueOrDie().key_value(), Eq("0123456789abcdef"));
+}
+
+TEST(AesGcmKeyManagerTest, DeriveLongKey) {
+  AesGcmKeyFormat format;
+  format.set_key_size(32);
+  format.set_version(0);
+
+  IstreamInputStream input_stream{absl::make_unique<std::stringstream>(
+      "0123456789abcdef0123456789abcdefXXX")};
+
+  StatusOr<AesGcmKey> key_or =
+      AesGcmKeyManager().DeriveKey(format, &input_stream);
+  ASSERT_THAT(key_or.status(), IsOk());
+  EXPECT_THAT(key_or.ValueOrDie().key_value(),
+              Eq("0123456789abcdef0123456789abcdef"));
+}
+
+TEST(AesGcmKeyManagerTest, DeriveKeyNotEnoughRandomness) {
+  AesGcmKeyFormat format;
+  format.set_key_size(16);
+  format.set_version(0);
+
+  IstreamInputStream input_stream{absl::make_unique<std::stringstream>(
+      "0123456789")};
+
+  ASSERT_THAT(
+      AesGcmKeyManager().DeriveKey(format, &input_stream).status(),
+      StatusIs(util::error::INVALID_ARGUMENT));
+}
+
+TEST(AesGcmKeyManagerTest, DeriveKeyWrongVersion) {
+  AesGcmKeyFormat format;
+  format.set_key_size(16);
+  format.set_version(1);
+
+  IstreamInputStream input_stream{absl::make_unique<std::stringstream>(
+      "0123456789abcdefghijklmnop")};
+
+  ASSERT_THAT(AesGcmKeyManager().DeriveKey(format, &input_stream).status(),
+              StatusIs(util::error::INVALID_ARGUMENT, HasSubstr("version")));
+}
 
 }  // namespace
 }  // namespace tink

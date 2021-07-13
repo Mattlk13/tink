@@ -29,7 +29,9 @@ if [[ -n "${KOKORO_ROOT}" ]]; then
   # TODO(b/73748835): Workaround on Kokoro.
   rm -f ~/.bazelrc
 
-  use_bazel.sh latest || exit 1
+  use_bazel.sh $(cat .bazelversion)
+
+  ./kokoro/copy_credentials.sh
 fi
 
 echo "Using bazel binary: $(which bazel)"
@@ -60,31 +62,76 @@ RBE_ARGS=(
 )
 readonly RBE_ARGS
 
-# Build all targets, except objc and proto.
-time bazel \
-  --bazelrc="tools/remote_build_execution/bazel-rbe.bazelrc" \
+RBE_BAZELRC="$PWD/tools/remote_build_execution/bazel-rbe.bazelrc"
+echo "RBE_BAZELRC: $RBE_BAZELRC"
+
+# TODO(b/141297103): enable Python
+# TODO(b/143102587): enable Javascript
+
+# Build and test C++.
+cd cc/
+time bazel --bazelrc="$RBE_BAZELRC" \
   build "${RBE_ARGS[@]}" \
   --config=remote \
   --build_tag_filters=-no_rbe \
-  --incompatible_disable_deprecated_attr_params=false \
-  --incompatible_depset_is_not_iterable=false \
-  -- \
-  //... \
-  -//objc/... \
-  -//proto/...
+  -- ...
 
-
-# Run all the tests except objc.
-time bazel \
-  --bazelrc="tools/remote_build_execution/bazel-rbe.bazelrc" \
+time bazel --bazelrc="$RBE_BAZELRC" \
   test "${RBE_ARGS[@]}" \
   --config=remote \
   --test_output=errors \
   --test_tag_filters=-no_rbe \
   --jvmopt=-Drbe=1 \
-  --incompatible_disable_deprecated_attr_params=false \
-  --incompatible_depset_is_not_iterable=false \
-  -- \
-  //... \
-  -//objc/... \
-  -//proto/...
+  -- ...
+
+# Build and test Java.
+cd ../java_src
+time bazel --bazelrc="$RBE_BAZELRC" \
+  build "${RBE_ARGS[@]}" \
+  --config=remote \
+  --build_tag_filters=-no_rbe \
+  -- ...
+
+time bazel --bazelrc="$RBE_BAZELRC" \
+  test "${RBE_ARGS[@]}" \
+  --config=remote \
+  --test_output=errors \
+  --test_tag_filters=-no_rbe \
+  --jvmopt=-Drbe=1 \
+  -- ...
+
+# Build and test Go.
+cd ../go
+time bazel --bazelrc="$RBE_BAZELRC" \
+  build "${RBE_ARGS[@]}" \
+  --config=remote \
+  --build_tag_filters=-no_rbe \
+  -- ...
+
+time bazel --bazelrc="$RBE_BAZELRC" \
+  test "${RBE_ARGS[@]}" \
+  --config=remote \
+  --test_output=errors \
+  --test_tag_filters=-no_rbe \
+  --jvmopt=-Drbe=1 \
+  -- ...
+
+# TODO(b/141297103): Python causes this to fail on remote
+# # Build tools and run cross-language tests.
+# cd ../tools
+# time bazel --bazelrc="$RBE_BAZELRC" \
+#   build "${RBE_ARGS[@]}" \
+#   --config=remote \
+#   --build_tag_filters=-no_rbe \
+#   -- ...
+#
+# time bazel --bazelrc="$RBE_BAZELRC" \
+#   test "${RBE_ARGS[@]}" \
+#   --config=remote \
+#   --test_output=errors \
+#   --test_tag_filters=-no_rbe \
+#   --jvmopt=-Drbe=1 \
+#   -- ...
+
+# We don't currently run TypeScript/JavaScript tests remotely because they
+# require libx11-xcb-dev in order to bring up browsers.

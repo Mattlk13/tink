@@ -16,8 +16,8 @@
 
 #include "tink/signature/rsa_ssa_pss_verify_key_manager.h"
 
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
-#include "tink/key_manager.h"
 #include "tink/public_key_verify.h"
 #include "tink/subtle/rsa_ssa_pss_verify_boringssl.h"
 #include "tink/subtle/subtle_util_boringssl.h"
@@ -30,8 +30,6 @@
 #include "proto/rsa_ssa_pss.pb.h"
 #include "proto/tink.pb.h"
 
-// TODO(quannguyen):
-//  + Validate salt length and possible e.
 namespace crypto {
 namespace tink {
 
@@ -41,25 +39,9 @@ using crypto::tink::util::StatusOr;
 using google::crypto::tink::RsaSsaPssParams;
 using google::crypto::tink::RsaSsaPssPublicKey;
 
-constexpr uint32_t RsaSsaPssVerifyKeyManager::kVersion;
-
-RsaSsaPssVerifyKeyManager::RsaSsaPssVerifyKeyManager()
-    : key_factory_(KeyFactory::AlwaysFailingFactory(
-          util::Status(util::error::UNIMPLEMENTED,
-                       "Operation not supported for public keys, "
-                       "please use the RsaSsaPssSignKeyManager."))) {}
-
-const KeyFactory& RsaSsaPssVerifyKeyManager::get_key_factory() const {
-  return *key_factory_;
-}
-
-uint32_t RsaSsaPssVerifyKeyManager::get_version() const { return kVersion; }
-
 StatusOr<std::unique_ptr<PublicKeyVerify>>
-RsaSsaPssVerifyKeyManager::GetPrimitiveFromKey(
+RsaSsaPssVerifyKeyManager::PublicKeyVerifyFactory::Create(
     const RsaSsaPssPublicKey& rsa_ssa_pss_public_key) const {
-  Status status = Validate(rsa_ssa_pss_public_key);
-  if (!status.ok()) return status;
   subtle::SubtleUtilBoringSSL::RsaPublicKey rsa_pub_key;
   rsa_pub_key.n = rsa_ssa_pss_public_key.n();
   rsa_pub_key.e = rsa_ssa_pss_public_key.e();
@@ -73,13 +55,26 @@ RsaSsaPssVerifyKeyManager::GetPrimitiveFromKey(
   auto rsa_ssa_pss_result =
       subtle::RsaSsaPssVerifyBoringSsl::New(rsa_pub_key, params);
   if (!rsa_ssa_pss_result.ok()) return rsa_ssa_pss_result.status();
-  std::unique_ptr<PublicKeyVerify> rsa_ssa_pss(
-      rsa_ssa_pss_result.ValueOrDie().release());
-  return std::move(rsa_ssa_pss);
+  return {std::move(rsa_ssa_pss_result).ValueOrDie()};
 }
 
-// static
-Status RsaSsaPssVerifyKeyManager::Validate(const RsaSsaPssParams& params) {
+Status RsaSsaPssVerifyKeyManager::ValidateKey(
+    const RsaSsaPssPublicKey& key) const {
+  Status status = ValidateVersion(key.version(), get_version());
+  if (!status.ok()) return status;
+  auto status_or_n = subtle::SubtleUtilBoringSSL::str2bn(key.n());
+  if (!status_or_n.ok()) return status_or_n.status();
+  auto modulus_status = subtle::SubtleUtilBoringSSL::ValidateRsaModulusSize(
+      BN_num_bits(status_or_n.ValueOrDie().get()));
+  if (!modulus_status.ok()) return modulus_status;
+  auto exponent_status = subtle::SubtleUtilBoringSSL::ValidateRsaPublicExponent(
+      key.e());
+  if (!exponent_status.ok()) return exponent_status;
+  return ValidateParams(key.params());
+}
+
+Status RsaSsaPssVerifyKeyManager::ValidateParams(
+    const RsaSsaPssParams& params) const {
   auto hash_result = subtle::SubtleUtilBoringSSL::ValidateSignatureHash(
       Enums::ProtoToSubtle(params.sig_hash()));
   if (!hash_result.ok()) return hash_result;
@@ -95,23 +90,18 @@ Status RsaSsaPssVerifyKeyManager::Validate(const RsaSsaPssParams& params) {
   //
   //  - Conscrypt/BouncyCastle do not support different hashes.
   if (params.mgf1_hash() != params.sig_hash()) {
-    return ToStatusF(util::error::INVALID_ARGUMENT,
-                     "MGF1 hash '%d' is different from signature hash '%d'",
-                     params.mgf1_hash(), params.sig_hash());
+    return util::Status(util::error::INVALID_ARGUMENT,
+                        absl::StrCat("MGF1 hash '",
+                                     params.mgf1_hash(),
+                                     "' is different from signature hash '",
+                                     params.sig_hash(),
+                                     "'"));
+  }
+  if (params.salt_length() < 0) {
+    return util::Status(util::error::INVALID_ARGUMENT,
+                        "salt length is negative");
   }
   return Status::OK;
-}
-
-// static
-Status RsaSsaPssVerifyKeyManager::Validate(const RsaSsaPssPublicKey& key) {
-  Status status = ValidateVersion(key.version(), kVersion);
-  if (!status.ok()) return status;
-  auto status_or_n = subtle::SubtleUtilBoringSSL::str2bn(key.n());
-  if (!status_or_n.ok()) return status_or_n.status();
-  auto modulus_status = subtle::SubtleUtilBoringSSL::ValidateRsaModulusSize(
-      BN_num_bits(status_or_n.ValueOrDie().get()));
-  if (!modulus_status.ok()) return modulus_status;
-  return Validate(key.params());
 }
 
 }  // namespace tink

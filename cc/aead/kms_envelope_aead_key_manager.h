@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -14,10 +16,10 @@
 #ifndef TINK_AEAD_KMS_ENVELOPE_AEAD_KEY_MANAGER_H_
 #define TINK_AEAD_KMS_ENVELOPE_AEAD_KEY_MANAGER_H_
 
-#include <algorithm>
-#include <vector>
+#include <string>
 
-#include "absl/strings/string_view.h"
+#include "absl/memory/memory.h"
+#include "absl/strings/str_cat.h"
 #include "tink/aead.h"
 #include "tink/core/key_type_manager.h"
 #include "tink/key_manager.h"
@@ -77,6 +79,10 @@ class KmsEnvelopeAeadKeyManager
     key.set_version(get_version());
     *(key.mutable_params()) = key_format;
     return key;
+  }
+
+  internal::FipsCompatibility FipsStatus() const override {
+    return internal::FipsCompatibility::kNotFips;
   }
 
  private:

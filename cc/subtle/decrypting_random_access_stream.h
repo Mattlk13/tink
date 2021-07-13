@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -64,11 +66,11 @@ class DecryptingRandomAccessStream : public crypto::tink::RandomAccessStream {
   // and writes the resulting plaintext bytes to pt_segment.
   // Uses the provided ct_buffer as a buffer for the ciphertext segment.
   crypto::tink::util::Status ReadAndDecryptSegment(
-      int segment_nr, crypto::tink::util::Buffer* ct_buffer,
+      int64_t segment_nr, crypto::tink::util::Buffer* ct_buffer,
       std::vector<uint8_t>* pt_segment);
   // Returns the segment number that contains the specified 'pt_position'.
-  int GetSegmentNr(int64_t pt_position);
-  // Returns the offset within a segment for the specified 'pt_position'
+  int64_t GetSegmentNr(int64_t pt_position);
+  // Returns the offset within a segment for the specified 'pt_position'.
   int GetPlaintextOffset(int64_t pt_position);
   // Initializes this stream (if not initialized yet or in a permantent error)
   // by reading the stream header from ct_source_ and using it initialize
@@ -78,13 +80,13 @@ class DecryptingRandomAccessStream : public crypto::tink::RandomAccessStream {
   std::unique_ptr<crypto::tink::RandomAccessStream> ct_source_;
 
   mutable absl::Mutex status_mutex_;
-  crypto::tink::util::Status status_ GUARDED_BY(status_mutex_);
+  crypto::tink::util::Status status_ ABSL_GUARDED_BY(status_mutex_);
   int header_size_;
   int ct_offset_;
   int ct_segment_size_;
   int pt_segment_size_;
   int ct_segment_overhead_;
-  int segment_count_;
+  int64_t segment_count_;
   int64_t pt_size_;
 };
 

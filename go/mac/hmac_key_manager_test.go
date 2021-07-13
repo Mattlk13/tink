@@ -1,3 +1,5 @@
+// Copyright 2018 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -22,13 +24,13 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/google/tink/go/core/registry"
-	subtleMac "github.com/google/tink/go/subtle/mac"
+	subtleMac "github.com/google/tink/go/mac/subtle"
 	"github.com/google/tink/go/subtle/random"
 	"github.com/google/tink/go/subtle"
 	"github.com/google/tink/go/testutil"
-	commonpb "github.com/google/tink/proto/common_go_proto"
-	hmacpb "github.com/google/tink/proto/hmac_go_proto"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	commonpb "github.com/google/tink/go/proto/common_go_proto"
+	hmacpb "github.com/google/tink/go/proto/hmac_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 func TestGetPrimitiveBasic(t *testing.T) {
@@ -285,7 +287,7 @@ func validateHMACPrimitive(p interface{}, key *hmacpb.HmacKey) error {
 		hmacPrimitive.TagSize != key.Params.TagSize ||
 		reflect.ValueOf(hmacPrimitive.HashFunc).Pointer() !=
 			reflect.ValueOf(subtle.GetHashFunc(commonpb.HashType_name[int32(key.Params.Hash)])).Pointer() {
-		return fmt.Errorf("primitive and key do not matched")
+		return fmt.Errorf("primitive and key do not match")
 	}
 	data := random.GetRandomBytes(20)
 	mac, err := hmacPrimitive.ComputeMAC(data)

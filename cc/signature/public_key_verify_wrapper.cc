@@ -16,6 +16,7 @@
 
 #include "tink/signature/public_key_verify_wrapper.h"
 
+#include "absl/strings/str_cat.h"
 #include "tink/crypto_format.h"
 #include "tink/primitive_set.h"
 #include "tink/public_key_verify.h"
@@ -71,22 +72,22 @@ util::Status PublicKeyVerifySetWrapper::Verify(
     // We're not aware of any schemes that output signatures that small.
     return util::Status(util::error::INVALID_ARGUMENT, "Signature too short.");
   }
-  const std::string& key_id = std::string(
-      signature.substr(0, CryptoFormat::kNonRawPrefixSize));
+  absl::string_view key_id =
+      signature.substr(0, CryptoFormat::kNonRawPrefixSize);
   auto primitives_result = public_key_verify_set_->get_primitives(key_id);
   if (primitives_result.ok()) {
     absl::string_view raw_signature =
         signature.substr(CryptoFormat::kNonRawPrefixSize);
-    std::string local_data;
     for (auto& entry : *(primitives_result.ValueOrDie())) {
+      std::string legacy_data;
+      absl::string_view view_on_data_or_legacy_data = data;
       if (entry->get_output_prefix_type() == OutputPrefixType::LEGACY) {
-        local_data = std::string(data);
-        local_data.append(1, CryptoFormat::kLegacyStartByte);
-        data = local_data;
+        legacy_data = absl::StrCat(data, std::string("\x00", 1));
+        view_on_data_or_legacy_data = legacy_data;
       }
       auto& public_key_verify = entry->get_primitive();
       auto verify_result =
-          public_key_verify.Verify(raw_signature, data);
+          public_key_verify.Verify(raw_signature, view_on_data_or_legacy_data);
       if (verify_result.ok()) {
         return util::Status::OK;
       } else {

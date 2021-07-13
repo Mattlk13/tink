@@ -17,9 +17,14 @@
 package com.google.crypto.tink.testing;
 
 import com.google.crypto.tink.BinaryKeysetReader;
+import com.google.crypto.tink.BinaryKeysetWriter;
 import com.google.crypto.tink.CleartextKeysetHandle;
 import com.google.crypto.tink.KeysetHandle;
-import com.google.crypto.tink.config.TinkConfig;
+import com.google.crypto.tink.daead.DeterministicAeadConfig;
+import com.google.crypto.tink.hybrid.HybridConfig;
+import com.google.crypto.tink.prf.PrfConfig;
+import com.google.crypto.tink.signature.SignatureConfig;
+import com.google.crypto.tink.streamingaead.StreamingAeadConfig;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -47,12 +52,23 @@ public class CliUtil {
     return CleartextKeysetHandle.read(BinaryKeysetReader.withFile(new File(filename)));
   }
 
+  /** Writes a keyset to the specified file. In case of errors throws an exception. */
+  public static void writeKeyset(KeysetHandle handle, String filename) throws IOException {
+    System.out.println("Writing the keyset...");
+    CleartextKeysetHandle.write(handle, BinaryKeysetWriter.withFile(new File(filename)));
+  }
+
   /**
    * Initializes Tink registry.
    * In case of errors throws an exception.
    */
   public static void initTink() throws GeneralSecurityException {
-    TinkConfig.register();
+    DeterministicAeadConfig.register();
+    HybridConfig.register(); // includes Aead and Mac
+    PrfConfig.register();
+    SignatureConfig.register();
+    StreamingAeadConfig.register();
+    // place holder for KeyderivationConfig. DO NOT EDIT.
   }
 
   /**

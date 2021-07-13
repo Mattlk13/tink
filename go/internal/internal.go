@@ -1,3 +1,5 @@
+// Copyright 2018 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -12,8 +14,9 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-// Package internal provides a coordination point for package keyset, package insecurecleartextkeyset, and package testkeyset.
-// internal must only be imported by these three packages.
+// Package internal provides a coordination point for package keyset, package
+// insecurecleartextkeyset, and package testkeyset.  internal must only be
+// imported by these three packages.
 package internal
 
 // KeysetHandle is a raw constructor of keyset.Handle.

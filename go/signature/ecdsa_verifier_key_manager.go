@@ -1,3 +1,5 @@
+// Copyright 2018 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -19,10 +21,9 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/google/tink/go/keyset"
-	"github.com/google/tink/go/core/registry"
-	subtleSignature "github.com/google/tink/go/subtle/signature"
-	ecdsapb "github.com/google/tink/proto/ecdsa_go_proto"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	"github.com/google/tink/go/signature/subtle"
+	ecdsapb "github.com/google/tink/go/proto/ecdsa_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 const (
@@ -37,9 +38,6 @@ var errECDSAVerifierNotImplemented = fmt.Errorf("ecdsa_verifier_key_manager: not
 // ecdsaVerifierKeyManager is an implementation of KeyManager interface.
 // It doesn't support key generation.
 type ecdsaVerifierKeyManager struct{}
-
-// Assert that ecdsaVerifierKeyManager implements the KeyManager interface.
-var _ registry.KeyManager = (*ecdsaVerifierKeyManager)(nil)
 
 // newECDSAVerifierKeyManager creates a new ecdsaVerifierKeyManager.
 func newECDSAVerifierKeyManager() *ecdsaVerifierKeyManager {
@@ -59,7 +57,7 @@ func (km *ecdsaVerifierKeyManager) Primitive(serializedKey []byte) (interface{},
 		return nil, fmt.Errorf("ecdsa_verifier_key_manager: %s", err)
 	}
 	hash, curve, encoding := getECDSAParamNames(key.Params)
-	ret, err := subtleSignature.NewECDSAVerifier(hash, curve, encoding, key.X, key.Y)
+	ret, err := subtle.NewECDSAVerifier(hash, curve, encoding, key.X, key.Y)
 	if err != nil {
 		return nil, fmt.Errorf("ecdsa_verifier_key_manager: invalid key: %s", err)
 	}
@@ -93,5 +91,5 @@ func (km *ecdsaVerifierKeyManager) validateKey(key *ecdsapb.EcdsaPublicKey) erro
 		return fmt.Errorf("ecdsa_verifier_key_manager: %s", err)
 	}
 	hash, curve, encoding := getECDSAParamNames(key.Params)
-	return subtleSignature.ValidateECDSAParams(hash, curve, encoding)
+	return subtle.ValidateECDSAParams(hash, curve, encoding)
 }

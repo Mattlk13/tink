@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -19,13 +21,13 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/google/tink/go/aead/subtle"
 	"github.com/google/tink/go/keyset"
 	"github.com/google/tink/go/mac"
-	"github.com/google/tink/go/subtle/aead"
 	"github.com/google/tink/go/testkeyset"
 	"github.com/google/tink/go/testutil"
 
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 func TestNewHandle(t *testing.T) {
@@ -64,9 +66,9 @@ func TestNewHandleWithInvalidInput(t *testing.T) {
 }
 
 func TestRead(t *testing.T) {
-	masterKey, err := aead.NewAESGCM([]byte(strings.Repeat("A", 32)))
+	masterKey, err := subtle.NewAESGCM([]byte(strings.Repeat("A", 32)))
 	if err != nil {
-		t.Errorf("aead.NewAESGCM(): %v", err)
+		t.Errorf("subtle.NewAESGCM(): %v", err)
 	}
 
 	// Create a keyset
@@ -141,7 +143,7 @@ func TestWithNoSecretsFunctionsFailWhenUnknownKeyMaterial(t *testing.T) {
 }
 
 func TestWithNoSecretsFunctionsFailWithAsymmetricPrivateKeyMaterial(t *testing.T) {
-	// Create a keyset containing secret key material (symmetric)
+	// Create a keyset containing secret key material (asymmetric)
 	keyData := testutil.NewKeyData("some type url", []byte{0}, tinkpb.KeyData_ASYMMETRIC_PRIVATE)
 	key := testutil.NewKey(keyData, tinkpb.KeyStatusType_ENABLED, 1, tinkpb.OutputPrefixType_TINK)
 	ks := testutil.NewKeyset(1, []*tinkpb.Keyset_Key{key})
@@ -153,5 +155,17 @@ func TestWithNoSecretsFunctionsFailWithAsymmetricPrivateKeyMaterial(t *testing.T
 
 	if _, err := keyset.ReadWithNoSecrets(&keyset.MemReaderWriter{Keyset: testkeyset.KeysetMaterial(h)}); err == nil {
 		t.Error("keyset.ReadWithNoSecrets should fail when importing secret key material")
+	}
+}
+
+func TestKeysetInfo(t *testing.T) {
+	kt := mac.HMACSHA256Tag128KeyTemplate()
+	kh, err := keyset.NewHandle(kt)
+	if err != nil {
+		t.Errorf("unexpected error: %s", err)
+	}
+	info := kh.KeysetInfo()
+	if info.PrimaryKeyId != info.KeyInfo[0].KeyId {
+		t.Errorf("Expected primary key id: %d, but got: %d", info.KeyInfo[0].KeyId, info.PrimaryKeyId)
 	}
 }

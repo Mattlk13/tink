@@ -1,8 +1,6 @@
-package(default_visibility = ["//tools/testing:__subpackages__"])
+package(default_visibility = ["//:__subpackages__"])
 
 licenses(["notice"])
-
-load("//tools/build_defs:javac.bzl", "JAVACOPTS_OSS")
 
 java_library(
     name = "cli_util",
@@ -10,9 +8,41 @@ java_library(
     srcs = [
         "java/com/google/crypto/tink/testing/CliUtil.java",
     ],
-    javacopts = JAVACOPTS_OSS,
     deps = [
-        "//java:testonly",
+        "@tink_java//src/main/java/com/google/crypto/tink:binary_keyset_reader",
+        "@tink_java//src/main/java/com/google/crypto/tink:binary_keyset_writer",
+        "@tink_java//src/main/java/com/google/crypto/tink:cleartext_keyset_handle",
+        "@tink_java//src/main/java/com/google/crypto/tink:registry_cluster",
+        "@tink_java//src/main/java/com/google/crypto/tink/config:tink_config",
+        "@tink_java//src/main/java/com/google/crypto/tink/daead:deterministic_aead_config",
+        "@tink_java//src/main/java/com/google/crypto/tink/hybrid:hybrid_config",
+        "@tink_java//src/main/java/com/google/crypto/tink/prf:prf_config",
+        "@tink_java//src/main/java/com/google/crypto/tink/signature:signature_config",
+        "@tink_java//src/main/java/com/google/crypto/tink/streamingaead:streaming_aead_config",
+    ],
+)
+
+java_library(
+    name = "compare_keysets",
+    testonly = 1,
+    srcs = ["java/com/google/crypto/tink/testing/CompareKeysets.java"],
+    deps = [
+        "@tink_java//proto:tink_java_proto",
+        "@tink_java//src/main/java/com/google/crypto/tink:privileged_registry",
+    ],
+)
+
+java_binary(
+    name = "compare_keysets_cli_java",
+    testonly = 1,
+    srcs = ["java/com/google/crypto/tink/testing/CompareKeysetsCli.java"],
+    main_class = "com.google.crypto.tink.testing.CompareKeysetsCli",
+    deps = [
+        ":cli_util",
+        ":compare_keysets",
+        "@tink_java//src/main/java/com/google/crypto/tink:cleartext_keyset_handle",
+        "@tink_java//src/main/java/com/google/crypto/tink:registry_cluster",
+        "@tink_java//src/main/java/com/google/crypto/tink/config:tink_config",
     ],
 )
 
@@ -22,10 +52,9 @@ java_binary(
     srcs = [
         "java/com/google/crypto/tink/testing/VersionCli.java",
     ],
-    javacopts = JAVACOPTS_OSS,
     main_class = "com.google.crypto.tink.testing.VersionCli",
     deps = [
-        "//java:testonly",
+        "@tink_java//src/main/java/com/google/crypto/tink:version",
     ],
 )
 
@@ -35,16 +64,15 @@ java_binary(
     srcs = [
         "java/com/google/crypto/tink/testing/AeadCli.java",
     ],
-    javacopts = JAVACOPTS_OSS,
     main_class = "com.google.crypto.tink.testing.AeadCli",
     deps = [
         ":cli_util",
-        "//java:testonly",
-        "//java/src/main/java/com/google/crypto/tink",
-        "//java/src/main/java/com/google/crypto/tink/aead",
-        "//java/src/main/java/com/google/crypto/tink/integration/gcpkms",
-        "//java/src/main/java/com/google/crypto/tink/integration/awskms",
-        "//java:testutil",
+        "@tink_java//src/main/java/com/google/crypto/tink:aead",
+        "@tink_java//src/main/java/com/google/crypto/tink:registry_cluster",
+        "@tink_java//src/main/java/com/google/crypto/tink/aead:aead_config",
+        "@tink_java//src/main/java/com/google/crypto/tink/integration/awskms:aws_kms_client",
+        "@tink_java//src/main/java/com/google/crypto/tink/integration/gcpkms:gcp_kms_client",
+        "@tink_java//src/main/java/com/google/crypto/tink/testing:test_util",
     ],
 )
 
@@ -54,11 +82,11 @@ java_binary(
     srcs = [
         "java/com/google/crypto/tink/testing/DeterministicAeadCli.java",
     ],
-    javacopts = JAVACOPTS_OSS,
     main_class = "com.google.crypto.tink.testing.DeterministicAeadCli",
     deps = [
         ":cli_util",
-        "//java:testonly",
+        "@tink_java//src/main/java/com/google/crypto/tink:deterministic_aead",
+        "@tink_java//src/main/java/com/google/crypto/tink:registry_cluster",
     ],
 )
 
@@ -68,11 +96,11 @@ java_binary(
     srcs = [
         "java/com/google/crypto/tink/testing/StreamingAeadCli.java",
     ],
-    javacopts = JAVACOPTS_OSS,
     main_class = "com.google.crypto.tink.testing.StreamingAeadCli",
     deps = [
         ":cli_util",
-        "//java:testonly",
+        "@tink_java//src/main/java/com/google/crypto/tink:registry_cluster",
+        "@tink_java//src/main/java/com/google/crypto/tink:streaming_aead",
     ],
 )
 
@@ -82,11 +110,11 @@ java_binary(
     srcs = [
         "java/com/google/crypto/tink/testing/MacCli.java",
     ],
-    javacopts = JAVACOPTS_OSS,
     main_class = "com.google.crypto.tink.testing.MacCli",
     deps = [
         ":cli_util",
-        "//java:testonly",
+        "@tink_java//src/main/java/com/google/crypto/tink:mac",
+        "@tink_java//src/main/java/com/google/crypto/tink:registry_cluster",
     ],
 )
 
@@ -96,11 +124,11 @@ java_binary(
     srcs = [
         "java/com/google/crypto/tink/testing/HybridEncryptCli.java",
     ],
-    javacopts = JAVACOPTS_OSS,
     main_class = "com.google.crypto.tink.testing.HybridEncryptCli",
     deps = [
         ":cli_util",
-        "//java:testonly",
+        "@tink_java//src/main/java/com/google/crypto/tink:hybrid_encrypt",
+        "@tink_java//src/main/java/com/google/crypto/tink:registry_cluster",
     ],
 )
 
@@ -110,11 +138,26 @@ java_binary(
     srcs = [
         "java/com/google/crypto/tink/testing/HybridDecryptCli.java",
     ],
-    javacopts = JAVACOPTS_OSS,
     main_class = "com.google.crypto.tink.testing.HybridDecryptCli",
     deps = [
         ":cli_util",
-        "//java:testonly",
+        "@tink_java//src/main/java/com/google/crypto/tink:hybrid_decrypt",
+        "@tink_java//src/main/java/com/google/crypto/tink:registry_cluster",
+    ],
+)
+
+java_binary(
+    name = "prf_set_cli_java",
+    testonly = 1,
+    srcs = [
+        "java/com/google/crypto/tink/testing/PrfSetCli.java",
+    ],
+    main_class = "com.google.crypto.tink.testing.PrfSetCli",
+    deps = [
+        ":cli_util",
+        "@tink_java//src/main/java/com/google/crypto/tink:registry_cluster",
+        "@tink_java//src/main/java/com/google/crypto/tink/prf:prf_set",
+        "@tink_java//src/main/java/com/google/crypto/tink/testing:test_util",
     ],
 )
 
@@ -124,11 +167,11 @@ java_binary(
     srcs = [
         "java/com/google/crypto/tink/testing/PublicKeySignCli.java",
     ],
-    javacopts = JAVACOPTS_OSS,
     main_class = "com.google.crypto.tink.testing.PublicKeySignCli",
     deps = [
         ":cli_util",
-        "//java:testonly",
+        "@tink_java//src/main/java/com/google/crypto/tink:public_key_sign",
+        "@tink_java//src/main/java/com/google/crypto/tink:registry_cluster",
     ],
 )
 
@@ -138,10 +181,10 @@ java_binary(
     srcs = [
         "java/com/google/crypto/tink/testing/PublicKeyVerifyCli.java",
     ],
-    javacopts = JAVACOPTS_OSS,
     main_class = "com.google.crypto.tink.testing.PublicKeyVerifyCli",
     deps = [
         ":cli_util",
-        "//java:testonly",
+        "@tink_java//src/main/java/com/google/crypto/tink:public_key_verify",
+        "@tink_java//src/main/java/com/google/crypto/tink:registry_cluster",
     ],
 )

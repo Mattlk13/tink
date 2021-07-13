@@ -1,3 +1,5 @@
+// Copyright 2018 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -14,10 +16,10 @@
 #ifndef TINK_AEAD_AES_EAX_KEY_MANAGER_H_
 #define TINK_AEAD_AES_EAX_KEY_MANAGER_H_
 
-#include <algorithm>
-#include <vector>
+#include <string>
 
-#include "absl/strings/string_view.h"
+#include "absl/memory/memory.h"
+#include "absl/strings/str_cat.h"
 #include "tink/aead.h"
 #include "tink/core/key_type_manager.h"
 #include "tink/subtle/aes_eax_boringssl.h"
@@ -25,6 +27,7 @@
 #include "tink/util/constants.h"
 #include "tink/util/errors.h"
 #include "tink/util/protobuf_helper.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
 #include "tink/util/validation.h"
@@ -40,8 +43,9 @@ class AesEaxKeyManager
   class AeadFactory : public PrimitiveFactory<Aead> {
     crypto::tink::util::StatusOr<std::unique_ptr<Aead>> Create(
         const google::crypto::tink::AesEaxKey& key) const override {
-      return subtle::AesEaxBoringSsl::New(key.key_value(),
-                                          key.params().iv_size());
+      return subtle::AesEaxBoringSsl::New(
+          util::SecretDataFromStringView(key.key_value()),
+          key.params().iv_size());
     }
   };
 

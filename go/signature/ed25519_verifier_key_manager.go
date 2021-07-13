@@ -1,3 +1,5 @@
+// Copyright 2018 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -17,13 +19,12 @@ package signature
 import (
 	"fmt"
 
-	"github.com/golang/protobuf/proto"
 	"golang.org/x/crypto/ed25519"
+	"github.com/golang/protobuf/proto"
 	"github.com/google/tink/go/keyset"
-	"github.com/google/tink/go/core/registry"
-	subtleSignature "github.com/google/tink/go/subtle/signature"
-	ed25519pb "github.com/google/tink/proto/ed25519_go_proto"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	"github.com/google/tink/go/signature/subtle"
+	ed25519pb "github.com/google/tink/go/proto/ed25519_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 const (
@@ -38,9 +39,6 @@ var errED25519VerifierNotImplemented = fmt.Errorf("ed25519_verifier_key_manager:
 // ed25519VerifierKeyManager is an implementation of KeyManager interface.
 // It doesn't support key generation.
 type ed25519VerifierKeyManager struct{}
-
-// Assert that ed25519VerifierKeyManager implements the KeyManager interface.
-var _ registry.KeyManager = (*ed25519VerifierKeyManager)(nil)
 
 // newED25519VerifierKeyManager creates a new ed25519VerifierKeyManager.
 func newED25519VerifierKeyManager() *ed25519VerifierKeyManager {
@@ -59,7 +57,7 @@ func (km *ed25519VerifierKeyManager) Primitive(serializedKey []byte) (interface{
 	if err := km.validateKey(key); err != nil {
 		return nil, fmt.Errorf("ed25519_verifier_key_manager: %s", err)
 	}
-	ret, err := subtleSignature.NewED25519Verifier(key.KeyValue)
+	ret, err := subtle.NewED25519Verifier(key.KeyValue)
 	if err != nil {
 		return nil, fmt.Errorf("ed25519_verifier_key_manager: invalid key: %s", err)
 	}

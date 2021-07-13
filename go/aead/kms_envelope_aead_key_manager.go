@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -19,10 +21,10 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/google/tink/go/keyset"
 	"github.com/google/tink/go/core/registry"
-	kmsepb "github.com/google/tink/proto/kms_envelope_go_proto"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	"github.com/google/tink/go/keyset"
+	kmsepb "github.com/google/tink/go/proto/kms_envelope_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 const (
@@ -33,9 +35,6 @@ const (
 // kmsEnvelopeAEADKeyManager is an implementation of KeyManager interface.
 // It generates new KMSEnvelopeAEADKey keys and produces new instances of KMSEnvelopeAEAD subtle.
 type kmsEnvelopeAEADKeyManager struct{}
-
-// Assert that kmsEnvelopeAEADKeyManager implements the KeyManager interface.
-var _ registry.KeyManager = (*kmsEnvelopeAEADKeyManager)(nil)
 
 // newKMSEnvelopeAEADKeyManager creates a new aesGcmKeyManager.
 func newKMSEnvelopeAEADKeyManager() *kmsEnvelopeAEADKeyManager {
@@ -64,7 +63,7 @@ func (km *kmsEnvelopeAEADKeyManager) Primitive(serializedKey []byte) (interface{
 		return nil, errors.New("kms_envelope_aead_key_manager: invalid aead backend")
 	}
 
-	return NewKMSEnvelopeAEAD(*key.Params.DekTemplate, backend), nil
+	return NewKMSEnvelopeAEAD2(key.Params.DekTemplate, backend), nil
 }
 
 // NewKey creates a new key according to specification the given serialized KMSEnvelopeAEADKeyFormat.

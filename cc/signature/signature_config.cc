@@ -18,6 +18,7 @@
 
 #include "absl/memory/memory.h"
 #include "tink/config/config_util.h"
+#include "tink/config/tink_fips.h"
 #include "tink/registry.h"
 #include "tink/signature/ecdsa_sign_key_manager.h"
 #include "tink/signature/ed25519_sign_key_manager.h"
@@ -45,45 +46,45 @@ const google::crypto::tink::RegistryConfig& SignatureConfig::Latest() {
 
 // static
 util::Status SignatureConfig::Register() {
-  // Register key managers.
-  // ECDSA
-  auto status = Registry::RegisterKeyManager(
-      absl::make_unique<EcdsaSignKeyManager>(), true);
+  // Register primitive wrappers.
+  auto status = Registry::RegisterPrimitiveWrapper(
+      absl::make_unique<PublicKeySignWrapper>());
   if (!status.ok()) return status;
-  status = Registry::RegisterKeyManager(
+  status = Registry::RegisterPrimitiveWrapper(
+      absl::make_unique<PublicKeyVerifyWrapper>());
+  if (!status.ok()) return status;
+
+  // Register key managers which utilize FIPS validated BoringCrypto
+  // implementations.
+  // ECDSA
+  status = Registry::RegisterAsymmetricKeyManagers(
+      absl::make_unique<EcdsaSignKeyManager>(),
       absl::make_unique<EcdsaVerifyKeyManager>(), true);
   if (!status.ok()) return status;
 
-  // ED25519
-  status = Registry::RegisterKeyManager(
-      absl::make_unique<Ed25519SignKeyManager>(), true);
-  if (!status.ok()) return status;
-  status = Registry::RegisterKeyManager(
-      absl::make_unique<Ed25519VerifyKeyManager>(), true);
-  if (!status.ok()) return status;
-
   // RSA SSA PSS
-  status = Registry::RegisterKeyManager(
-      absl::make_unique<RsaSsaPssSignKeyManager>(), true);
-  if (!status.ok()) return status;
-  status = Registry::RegisterKeyManager(
+  status = Registry::RegisterAsymmetricKeyManagers(
+      absl::make_unique<RsaSsaPssSignKeyManager>(),
       absl::make_unique<RsaSsaPssVerifyKeyManager>(), true);
   if (!status.ok()) return status;
 
   // RSA SSA PKCS1
-  status = Registry::RegisterKeyManager(
-      absl::make_unique<RsaSsaPkcs1SignKeyManager>(), true);
-  if (!status.ok()) return status;
-  status = Registry::RegisterKeyManager(
+  status = Registry::RegisterAsymmetricKeyManagers(
+      absl::make_unique<RsaSsaPkcs1SignKeyManager>(),
       absl::make_unique<RsaSsaPkcs1VerifyKeyManager>(), true);
   if (!status.ok()) return status;
 
-  // Register primitive wrappers.
-  status = Registry::RegisterPrimitiveWrapper(
-      absl::make_unique<PublicKeySignWrapper>());
+  if (IsFipsModeEnabled()) {
+    return util::OkStatus();
+  }
+
+  // ED25519
+  status = Registry::RegisterAsymmetricKeyManagers(
+      absl::make_unique<Ed25519SignKeyManager>(),
+      absl::make_unique<Ed25519VerifyKeyManager>(), true);
   if (!status.ok()) return status;
-  return  Registry::RegisterPrimitiveWrapper(
-      absl::make_unique<PublicKeyVerifyWrapper>());
+
+  return util::OkStatus();
 }
 
 }  // namespace tink

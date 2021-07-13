@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -13,46 +15,9 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 // Package daead provides implementations of the DeterministicAEAD primitive.
+//
 // Unlike AEAD, implementations of this interface are not semantically secure, because
 // encrypting the same plaintex always yields the same ciphertext.
-// Example:
-//
-// package main
-//
-// import (
-//     "fmt"
-//
-//     "github.com/google/tink/go/daead"
-//     "github.com/google/tink/go/keyset"
-// )
-//
-// func main() {
-//
-//     kh, err := keyset.NewHandle(daead.AESSIVKeyTemplate())
-//     if err != nil {
-//         // handle the error
-//     }
-//
-//     d := daead.New(kh)
-//
-//     ct1 , err := d.EncryptDeterministically([]byte("this data needs to be encrypted"), []byte("additional data"))
-//     if err != nil {
-//         // handle error
-//     }
-//
-//     pt , err := d.DecryptDeterministically(ct, []byte("additional data"))
-//     if err != nil {
-//         // handle error
-//     }
-//
-//     ct2 , err := d.EncryptDeterministically([]byte("this data needs to be encrypted"), []byte("additional data"))
-//     if err != nil {
-//         // handle error
-//     }
-//
-//     // ct1 will be equal to ct2
-//
-// }
 package daead
 
 import (

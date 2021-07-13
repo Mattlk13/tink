@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright 2019 Google LLC
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -12,15 +14,22 @@
 # limitations under the License.
 ################################################################################
 
+# TODO(b/154273145): re-enable this.
+exit 0
 
-ROOT_DIR="$TEST_SRCDIR/tink"
-GCP_KMS_AEAD_CLI="$ROOT_DIR/tools/testing/cc/gcp_kms_aead_cli"
-GCP_KEY_NAME_FILE="$ROOT_DIR/testdata/gcp_key_name.txt"
-CREDENTIALS_GCP_JSON_FILE="$ROOT_DIR/testdata/credential.json"
-BAD_GCP_KEY_NAME_FILE="$ROOT_DIR/testdata/bad_gcp_key_name.txt"
-BAD_CREDENTIALS_GCP_JSON_FILE="$ROOT_DIR/testdata/bad_gcp_credentials.json"
-TEST_UTIL="$ROOT_DIR/tools/testing/cross_language/test_util.sh"
+ROOT_DIR="$TEST_SRCDIR/tools"
+GCP_KMS_AEAD_CLI="$ROOT_DIR/testing/cc/gcp_kms_aead_cli"
+TEST_UTIL="$ROOT_DIR/testing/cross_language/test_util.sh"
+BASE_DIR="$TEST_SRCDIR/tink_base"
+GCP_KEY_NAME_FILE="$BASE_DIR/testdata/gcp_key_name.txt"
+CREDENTIALS_GCP_JSON_FILE="$BASE_DIR/testdata/credential.json"
+BAD_GCP_KEY_NAME_FILE="$BASE_DIR/testdata/bad_gcp_key_name.txt"
+BAD_CREDENTIALS_GCP_JSON_FILE="$BASE_DIR/testdata/bad_gcp_credentials.json"
 associated_data="some associated data"
+
+# Roots for GRPC
+# (https://github.com/grpc/grpc/blob/master/doc/environment_variables.md)
+export GRPC_DEFAULT_SSL_ROOTS_FILE_PATH="$TEST_SRCDIR/google_root_pem/file/downloaded"
 
 source $TEST_UTIL || exit 1
 

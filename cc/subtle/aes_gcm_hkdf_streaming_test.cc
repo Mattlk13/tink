@@ -19,25 +19,33 @@
 #include <sstream>
 #include <string>
 
+#include "gtest/gtest.h"
 #include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
+#include "tink/config/tink_fips.h"
 #include "tink/output_stream.h"
 #include "tink/subtle/common_enums.h"
 #include "tink/subtle/random.h"
+#include "tink/subtle/streaming_aead_test_util.h"
 #include "tink/subtle/test_util.h"
 #include "tink/util/istream_input_stream.h"
 #include "tink/util/ostream_output_stream.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
-#include "gtest/gtest.h"
-
+#include "tink/util/test_matchers.h"
 
 namespace crypto {
 namespace tink {
 namespace subtle {
 namespace {
 
+using ::crypto::tink::test::IsOk;
+using ::crypto::tink::test::StatusIs;
+
 TEST(AesGcmHkdfStreamingTest, testBasic) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
   for (HashType hkdf_hash : {SHA1, SHA256, SHA512}) {
     for (int ikm_size : {16, 32}) {
       for (int derived_key_size = 16;
@@ -52,10 +60,13 @@ TEST(AesGcmHkdfStreamingTest, testBasic) {
                 ", ciphertext_segment_size = ", ct_segment_size,
                 ", ciphertext_offset = ", ciphertext_offset));
             // Create AesGcmHkdfStreaming.
-            std::string ikm = Random::GetRandomBytes(ikm_size);
-            auto result = AesGcmHkdfStreaming::New(
-                ikm, hkdf_hash, derived_key_size,
-                ct_segment_size, ciphertext_offset);
+            AesGcmHkdfStreaming::Params params;
+            params.ikm = Random::GetRandomKeyBytes(ikm_size);
+            params.hkdf_hash = hkdf_hash;
+            params.derived_key_size = derived_key_size;
+            params.ciphertext_segment_size = ct_segment_size;
+            params.ciphertext_offset = ciphertext_offset;
+            auto result = AesGcmHkdfStreaming::New(std::move(params));
             EXPECT_TRUE(result.ok()) << result.status();
             auto streaming_aead = std::move(result.ValueOrDie());
 
@@ -71,40 +82,11 @@ TEST(AesGcmHkdfStreamingTest, testBasic) {
 
             for (int pt_size : {0, 16, 100, 1000, 10000}) {
               SCOPED_TRACE(absl::StrCat(" pt_size = ", pt_size));
-
-              // Prepare ciphertext destination stream.
-              auto ct_stream = absl::make_unique<std::stringstream>();
-              // A reference to the ciphertext buffer, for later validation.
-              auto ct_buf = ct_stream->rdbuf();
-              std::unique_ptr<OutputStream> ct_destination(
-                  absl::make_unique<util::OstreamOutputStream>(
-                      std::move(ct_stream)));
-
-              // Use AesGcmHkdfStreaming to encrypt some data.
-              auto enc_stream_result = streaming_aead->NewEncryptingStream(
-                  std::move(ct_destination), associated_data);
-              EXPECT_TRUE(enc_stream_result.ok()) << enc_stream_result.status();
-              auto enc_stream = std::move(enc_stream_result.ValueOrDie());
               std::string pt = Random::GetRandomBytes(pt_size);
-              auto status = test::WriteToStream(enc_stream.get(), pt);
-              EXPECT_TRUE(status.ok()) << status;
-              EXPECT_EQ(pt_size, enc_stream->Position());
-              std::string ct = ct_buf->str();
-              EXPECT_NE(ct, pt);
-
-              // Use AesGcmHkdfStreaming to decrypt the resulting ciphertext.
-              auto ct_bytes = absl::make_unique<std::stringstream>(std::string(ct));
-              std::unique_ptr<InputStream> ct_source(
-                  absl::make_unique<util::IstreamInputStream>(
-                      std::move(ct_bytes)));
-              auto dec_stream_result = streaming_aead->NewDecryptingStream(
-                  std::move(ct_source), associated_data);
-              EXPECT_TRUE(dec_stream_result.ok()) << dec_stream_result.status();
-              auto dec_stream = std::move(dec_stream_result.ValueOrDie());
-              std::string decrypted;
-              status = test::ReadFromStream(dec_stream.get(), &decrypted);
-              EXPECT_TRUE(status.ok()) << status;
-              EXPECT_EQ(pt, decrypted);
+              EXPECT_THAT(
+                  EncryptThenDecrypt(streaming_aead.get(), streaming_aead.get(),
+                                     pt, associated_data, ciphertext_offset),
+                  IsOk());
             }
           }
         }
@@ -114,15 +96,17 @@ TEST(AesGcmHkdfStreamingTest, testBasic) {
 }
 
 TEST(AesGcmHkdfStreamingTest, testIkmSmallerThanDerivedKey) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+  AesGcmHkdfStreaming::Params params;
   int ikm_size = 16;
-  int derived_key_size = 17;
-  int ct_segment_size = 100;
-  int ciphertext_offset = 10;
-  HashType hkdf_hash = SHA256;
-  std::string ikm = Random::GetRandomBytes(ikm_size);
-
-  auto result = AesGcmHkdfStreaming::New(
-      ikm, hkdf_hash, derived_key_size, ct_segment_size, ciphertext_offset);
+  params.ikm = Random::GetRandomKeyBytes(ikm_size);
+  params.derived_key_size = 17;
+  params.ciphertext_segment_size = 100;
+  params.ciphertext_offset = 10;
+  params.hkdf_hash = SHA256;
+  auto result = AesGcmHkdfStreaming::New(std::move(params));
   EXPECT_FALSE(result.ok());
   EXPECT_EQ(util::error::INVALID_ARGUMENT, result.status().error_code());
   EXPECT_PRED_FORMAT2(testing::IsSubstring, "ikm too small",
@@ -130,16 +114,18 @@ TEST(AesGcmHkdfStreamingTest, testIkmSmallerThanDerivedKey) {
 }
 
 TEST(AesGcmHkdfStreamingTest, testIkmSize) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
   for (int ikm_size : {5, 10, 15}) {
-    int derived_key_size = ikm_size;
-    int ct_segment_size = 100;
-    int ciphertext_offset = 0;
-    HashType hkdf_hash = SHA256;
-    std::string ikm = Random::GetRandomBytes(ikm_size);
+    AesGcmHkdfStreaming::Params params;
+    params.ikm = Random::GetRandomKeyBytes(ikm_size);
+    params.derived_key_size = 17;
+    params.ciphertext_segment_size = 100;
+    params.ciphertext_offset = 0;
+    params.hkdf_hash = SHA256;
 
-    auto result = AesGcmHkdfStreaming::New(
-        ikm, hkdf_hash, derived_key_size,
-        ct_segment_size, ciphertext_offset);
+    auto result = AesGcmHkdfStreaming::New(std::move(params));
     EXPECT_FALSE(result.ok());
     EXPECT_EQ(util::error::INVALID_ARGUMENT, result.status().error_code());
     EXPECT_PRED_FORMAT2(testing::IsSubstring, "ikm too small",
@@ -148,15 +134,18 @@ TEST(AesGcmHkdfStreamingTest, testIkmSize) {
 }
 
 TEST(AesGcmHkdfStreamingTest, testWrongHkdfHash) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+  AesGcmHkdfStreaming::Params params;
   int ikm_size = 16;
-  int derived_key_size = 16;
-  int ct_segment_size = 100;
-  int ciphertext_offset = 10;
-  HashType hkdf_hash = SHA384;
-  std::string ikm = Random::GetRandomBytes(ikm_size);
+  params.ikm = Random::GetRandomKeyBytes(ikm_size);
+  params.derived_key_size = 16;
+  params.ciphertext_segment_size = 100;
+  params.ciphertext_offset = 10;
+  params.hkdf_hash = SHA384;
 
-  auto result = AesGcmHkdfStreaming::New(ikm, hkdf_hash, derived_key_size,
-                                         ct_segment_size, ciphertext_offset);
+  auto result = AesGcmHkdfStreaming::New(std::move(params));
   EXPECT_FALSE(result.ok());
   EXPECT_EQ(util::error::INVALID_ARGUMENT, result.status().error_code());
   EXPECT_PRED_FORMAT2(testing::IsSubstring, "unsupported hkdf_hash",
@@ -164,15 +153,18 @@ TEST(AesGcmHkdfStreamingTest, testWrongHkdfHash) {
 }
 
 TEST(AesGcmHkdfStreamingTest, testWrongDerivedKeySize) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+  AesGcmHkdfStreaming::Params params;
   int ikm_size = 20;
-  int derived_key_size = 20;
-  int ct_segment_size = 100;
-  int ciphertext_offset = 10;
-  HashType hkdf_hash = SHA256;
-  std::string ikm = Random::GetRandomBytes(ikm_size);
+  params.ikm = Random::GetRandomKeyBytes(ikm_size);
+  params.derived_key_size = 20;
+  params.ciphertext_segment_size = 100;
+  params.ciphertext_offset = 10;
+  params.hkdf_hash = SHA256;
 
-  auto result = AesGcmHkdfStreaming::New(
-      ikm, hkdf_hash, derived_key_size, ct_segment_size, ciphertext_offset);
+  auto result = AesGcmHkdfStreaming::New(std::move(params));
   EXPECT_FALSE(result.ok());
   EXPECT_EQ(util::error::INVALID_ARGUMENT, result.status().error_code());
   EXPECT_PRED_FORMAT2(testing::IsSubstring, "must be 16 or 32",
@@ -180,15 +172,18 @@ TEST(AesGcmHkdfStreamingTest, testWrongDerivedKeySize) {
 }
 
 TEST(AesGcmHkdfStreamingTest, testWrongCiphertextOffset) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+  AesGcmHkdfStreaming::Params params;
   int ikm_size = 32;
-  int derived_key_size = 32;
-  int ct_segment_size = 100;
-  int ciphertext_offset = -5;
-  HashType hkdf_hash = SHA256;
-  std::string ikm = Random::GetRandomBytes(ikm_size);
+  params.ikm = Random::GetRandomKeyBytes(ikm_size);
+  params.derived_key_size = 32;
+  params.ciphertext_segment_size = 100;
+  params.ciphertext_offset = -5;
+  params.hkdf_hash = SHA256;
 
-  auto result = AesGcmHkdfStreaming::New(
-      ikm, hkdf_hash, derived_key_size, ct_segment_size, ciphertext_offset);
+  auto result = AesGcmHkdfStreaming::New(std::move(params));
   EXPECT_FALSE(result.ok());
   EXPECT_EQ(util::error::INVALID_ARGUMENT, result.status().error_code());
   EXPECT_PRED_FORMAT2(testing::IsSubstring, "must be non-negative",
@@ -196,19 +191,40 @@ TEST(AesGcmHkdfStreamingTest, testWrongCiphertextOffset) {
 }
 
 TEST(AesGcmHkdfStreamingTest, testWrongCiphertextSegmentSize) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+  AesGcmHkdfStreaming::Params params;
   int ikm_size = 32;
-  int derived_key_size = 32;
-  int ct_segment_size = 64;
-  int ciphertext_offset = 40;
-  HashType hkdf_hash = SHA256;
-  std::string ikm = Random::GetRandomBytes(ikm_size);
+  params.ikm = Random::GetRandomKeyBytes(ikm_size);
+  params.derived_key_size = 32;
+  params.ciphertext_segment_size = 64;
+  params.ciphertext_offset = 40;
+  params.hkdf_hash = SHA256;
 
-  auto result = AesGcmHkdfStreaming::New(
-      ikm, hkdf_hash, derived_key_size, ct_segment_size, ciphertext_offset);
+  auto result = AesGcmHkdfStreaming::New(std::move(params));
   EXPECT_FALSE(result.ok());
   EXPECT_EQ(util::error::INVALID_ARGUMENT, result.status().error_code());
   EXPECT_PRED_FORMAT2(testing::IsSubstring, "ciphertext_segment_size too small",
                       result.status().error_message());
+}
+
+
+// FIPS only mode tests
+TEST(AesGcmHkdfStreamingTest, TestFipsOnly) {
+  if (!IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Only supported in FIPS-only mode";
+  }
+  AesGcmHkdfStreaming::Params params;
+  int ikm_size = 32;
+  params.ikm = Random::GetRandomKeyBytes(ikm_size);
+  params.derived_key_size = 32;
+  params.ciphertext_segment_size = 64;
+  params.ciphertext_offset = 40;
+  params.hkdf_hash = SHA256;
+
+  EXPECT_THAT(AesGcmHkdfStreaming::New(std::move(params)).status(),
+              StatusIs(util::error::INTERNAL));
 }
 
 }  // namespace

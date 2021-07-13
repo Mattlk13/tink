@@ -29,9 +29,10 @@ namespace tink {
 
 // Wraps a set of PublicKeySign-instances that correspond to a keyset,
 // and combines them into a single PublicKeySign-primitive,
-// that for the actual verification uses the instance that maches the
+// that for the actual verification uses the instance that matches the
 // signature prefix.
-class PublicKeySignWrapper : public PrimitiveWrapper<PublicKeySign> {
+class PublicKeySignWrapper
+    : public PrimitiveWrapper<PublicKeySign, PublicKeySign> {
  public:
   // Returns an PublicKeySign-primitive that uses the primary
   // PublicKeySign-instance provided in 'public_key_sign_set',

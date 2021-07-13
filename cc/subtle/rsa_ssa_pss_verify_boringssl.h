@@ -18,11 +18,13 @@
 #define TINK_SUBTLE_RSA_SSA_PSS_VERIFY_BORINGSSL_H_
 
 #include <memory>
+#include <utility>
 
 #include "absl/strings/string_view.h"
 #include "openssl/evp.h"
 #include "openssl/rsa.h"
 #include "tink/public_key_verify.h"
+#include "tink/internal/fips_utils.h"
 #include "tink/subtle/common_enums.h"
 #include "tink/subtle/subtle_util_boringssl.h"
 #include "tink/util/status.h"
@@ -47,12 +49,20 @@ class RsaSsaPssVerifyBoringSsl : public PublicKeyVerify {
 
   ~RsaSsaPssVerifyBoringSsl() override = default;
 
+  static constexpr crypto::tink::internal::FipsCompatibility kFipsStatus =
+      crypto::tink::internal::FipsCompatibility::kRequiresBoringCrypto;
+
  private:
   RsaSsaPssVerifyBoringSsl(bssl::UniquePtr<RSA> rsa, const EVP_MD* sig_hash,
-                           const EVP_MD* mgf1_hash, int salt_length);
+                           const EVP_MD* mgf1_hash, int salt_length)
+      : rsa_(std::move(rsa)),
+        sig_hash_(sig_hash),
+        mgf1_hash_(mgf1_hash),
+        salt_length_(salt_length) {}
+
   const bssl::UniquePtr<RSA> rsa_;
-  const EVP_MD* sig_hash_;   // Owned by BoringSSL.
-  const EVP_MD* mgf1_hash_;  // Owned by BoringSSL.
+  const EVP_MD* const sig_hash_;   // Owned by BoringSSL.
+  const EVP_MD* const mgf1_hash_;  // Owned by BoringSSL.
   int salt_length_;
 };
 

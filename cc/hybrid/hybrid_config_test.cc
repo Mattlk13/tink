@@ -16,9 +16,12 @@
 
 #include "tink/hybrid/hybrid_config.h"
 
+#include <list>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "tink/config.h"
+#include "tink/config/tink_fips.h"
 #include "tink/hybrid/ecies_aead_hkdf_private_key_manager.h"
 #include "tink/hybrid/ecies_aead_hkdf_public_key_manager.h"
 #include "tink/hybrid/hybrid_key_templates.h"
@@ -45,6 +48,10 @@ class HybridConfigTest : public ::testing::Test {
 };
 
 TEST_F(HybridConfigTest, Basic) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+
   EXPECT_THAT(Registry::get_key_manager<HybridDecrypt>(
                   EciesAeadHkdfPrivateKeyManager().get_key_type())
                   .status(),
@@ -67,19 +74,24 @@ TEST_F(HybridConfigTest, Basic) {
 // Tests that the HybridEncryptWrapper has been properly registered and we
 // can wrap primitives.
 TEST_F(HybridConfigTest, EncryptWrapperRegistered) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+
   ASSERT_TRUE(HybridConfig::Register().ok());
 
-  google::crypto::tink::Keyset::Key key;
-  key.set_status(google::crypto::tink::KeyStatusType::ENABLED);
-  key.set_key_id(1234);
-  key.set_output_prefix_type(google::crypto::tink::OutputPrefixType::TINK);
+  google::crypto::tink::KeysetInfo::KeyInfo key_info;
+  key_info.set_status(google::crypto::tink::KeyStatusType::ENABLED);
+  key_info.set_key_id(1234);
+  key_info.set_output_prefix_type(google::crypto::tink::OutputPrefixType::TINK);
   auto primitive_set = absl::make_unique<PrimitiveSet<HybridEncrypt>>();
-  ASSERT_THAT(primitive_set->set_primary(
-                  primitive_set
-                      ->AddPrimitive(
-                          absl::make_unique<DummyHybridEncrypt>("dummy"), key)
-                      .ValueOrDie()),
-              IsOk());
+  ASSERT_THAT(
+      primitive_set->set_primary(
+          primitive_set
+              ->AddPrimitive(absl::make_unique<DummyHybridEncrypt>("dummy"),
+                             key_info)
+              .ValueOrDie()),
+      IsOk());
 
   auto wrapped = Registry::Wrap(std::move(primitive_set));
 
@@ -87,7 +99,7 @@ TEST_F(HybridConfigTest, EncryptWrapperRegistered) {
   auto encryption_result = wrapped.ValueOrDie()->Encrypt("secret", "");
   ASSERT_TRUE(encryption_result.ok());
 
-  std::string prefix = CryptoFormat::get_output_prefix(key).ValueOrDie();
+  std::string prefix = CryptoFormat::GetOutputPrefix(key_info).ValueOrDie();
   EXPECT_EQ(
       encryption_result.ValueOrDie(),
       absl::StrCat(
@@ -98,25 +110,30 @@ TEST_F(HybridConfigTest, EncryptWrapperRegistered) {
 // Tests that the HybridDecryptWrapper has been properly registered and we
 // can wrap primitives.
 TEST_F(HybridConfigTest, DecryptWrapperRegistered) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+
   ASSERT_TRUE(HybridConfig::Register().ok());
 
-  google::crypto::tink::Keyset::Key key;
-  key.set_status(google::crypto::tink::KeyStatusType::ENABLED);
-  key.set_key_id(1234);
-  key.set_output_prefix_type(google::crypto::tink::OutputPrefixType::TINK);
+  google::crypto::tink::KeysetInfo::KeyInfo key_info;
+  key_info.set_status(google::crypto::tink::KeyStatusType::ENABLED);
+  key_info.set_key_id(1234);
+  key_info.set_output_prefix_type(google::crypto::tink::OutputPrefixType::TINK);
   auto primitive_set = absl::make_unique<PrimitiveSet<HybridDecrypt>>();
-  ASSERT_THAT(primitive_set->set_primary(
-                  primitive_set
-                      ->AddPrimitive(
-                          absl::make_unique<DummyHybridDecrypt>("dummy"), key)
-                      .ValueOrDie()),
-              IsOk());
+  ASSERT_THAT(
+      primitive_set->set_primary(
+          primitive_set
+              ->AddPrimitive(absl::make_unique<DummyHybridDecrypt>("dummy"),
+                             key_info)
+              .ValueOrDie()),
+      IsOk());
 
   auto wrapped = Registry::Wrap(std::move(primitive_set));
 
   ASSERT_TRUE(wrapped.ok()) << wrapped.status();
 
-  std::string prefix = CryptoFormat::get_output_prefix(key).ValueOrDie();
+  std::string prefix = CryptoFormat::GetOutputPrefix(key_info).ValueOrDie();
   std::string encryption =
       DummyHybridEncrypt("dummy").Encrypt("secret", "").ValueOrDie();
 
@@ -124,6 +141,41 @@ TEST_F(HybridConfigTest, DecryptWrapperRegistered) {
                 ->Decrypt(absl::StrCat(prefix, encryption), "")
                 .ValueOrDie(),
             "secret");
+}
+
+// FIPS-only mode tests
+TEST_F(HybridConfigTest, RegisterNonFipsTemplates) {
+  if (!IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Only supported in FIPS-only mode";
+  }
+
+  EXPECT_THAT(HybridConfig::Register(), IsOk());
+
+  // Check that we can not retrieve non-FIPS keyset handle
+  std::list<google::crypto::tink::KeyTemplate> non_fips_key_templates;
+  non_fips_key_templates.push_back(
+      HybridKeyTemplates::
+          EciesP256CompressedHkdfHmacSha256Aes128CtrHmacSha256());
+  non_fips_key_templates.push_back(
+      HybridKeyTemplates::EciesP256CompressedHkdfHmacSha256Aes128Gcm());
+  non_fips_key_templates.push_back(
+      HybridKeyTemplates::EciesP256HkdfHmacSha256Aes128CtrHmacSha256());
+  non_fips_key_templates.push_back(
+      HybridKeyTemplates::EciesP256HkdfHmacSha256Aes128Gcm());
+  non_fips_key_templates.push_back(
+      HybridKeyTemplates::
+          EciesP256HkdfHmacSha256Aes128GcmCompressedWithoutPrefix());
+  non_fips_key_templates.push_back(
+      HybridKeyTemplates::EciesX25519HkdfHmacSha256Aes128CtrHmacSha256());
+  non_fips_key_templates.push_back(
+      HybridKeyTemplates::EciesX25519HkdfHmacSha256Aes128Gcm());
+  non_fips_key_templates.push_back(
+      HybridKeyTemplates::EciesX25519HkdfHmacSha256XChaCha20Poly1305());
+
+  for (auto key_template : non_fips_key_templates) {
+    EXPECT_THAT(KeysetHandle::GenerateNew(key_template).status(),
+                StatusIs(util::error::NOT_FOUND));
+  }
 }
 
 }  // namespace

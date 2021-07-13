@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -19,9 +21,10 @@ import (
 	"testing"
 
 	"github.com/google/tink/go/aead"
-	subtle "github.com/google/tink/go/subtle/hybrid"
+	"github.com/google/tink/go/daead"
+	"github.com/google/tink/go/hybrid/subtle"
 	"github.com/google/tink/go/subtle/random"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 func basicMultipleEncrypts(t *testing.T, c string, k *tinkpb.KeyTemplate) {
@@ -96,4 +99,11 @@ func TestECAES256GCMEncrypt(t *testing.T) {
 	basicMultipleEncrypts(t, "NIST_P384", aead.AES128GCMKeyTemplate())
 	basicMultipleEncrypts(t, "NIST_P521", aead.AES128GCMKeyTemplate())
 	basicMultipleEncrypts(t, "NIST_P224", aead.AES128GCMKeyTemplate())
+}
+
+func TestECAESSIVEncrypt(t *testing.T) {
+	basicMultipleEncrypts(t, "NIST_P256", daead.AESSIVKeyTemplate())
+	basicMultipleEncrypts(t, "NIST_P384", daead.AESSIVKeyTemplate())
+	basicMultipleEncrypts(t, "NIST_P521", daead.AESSIVKeyTemplate())
+	basicMultipleEncrypts(t, "NIST_P224", daead.AESSIVKeyTemplate())
 }

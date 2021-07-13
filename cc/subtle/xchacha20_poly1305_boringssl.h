@@ -18,10 +18,13 @@
 #define TINK_SUBTLE_XCHACHA20_POLY1305_BORINGSSL_H_
 
 #include <memory>
+#include <utility>
 
 #include "absl/strings/string_view.h"
-#include "openssl/evp.h"
+#include "openssl/base.h"
 #include "tink/aead.h"
+#include "tink/internal/fips_utils.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
 
@@ -36,7 +39,7 @@ class XChacha20Poly1305BoringSsl : public Aead {
   // Currently supported nonce size is 24 bytes.
   // The tag size is fixed to 16 bytes.
   static crypto::tink::util::StatusOr<std::unique_ptr<Aead>> New(
-      absl::string_view key_value);
+      util::SecretData key);
 
   crypto::tink::util::StatusOr<std::string> Encrypt(
       absl::string_view plaintext,
@@ -46,18 +49,19 @@ class XChacha20Poly1305BoringSsl : public Aead {
       absl::string_view ciphertext,
       absl::string_view additional_data) const override;
 
-  virtual ~XChacha20Poly1305BoringSsl() {}
+  static constexpr crypto::tink::internal::FipsCompatibility kFipsStatus =
+      crypto::tink::internal::FipsCompatibility::kNotFips;
 
  private:
   // The following constants are in bytes.
-  static const int NONCE_SIZE = 24;
-  static const int TAG_SIZE = 16;
+  static constexpr int kNonceSize = 24;
+  static constexpr int kTagSize = 16;
 
-  XChacha20Poly1305BoringSsl() = delete;
-  XChacha20Poly1305BoringSsl(absl::string_view key_value, const EVP_AEAD* aead);
+  XChacha20Poly1305BoringSsl(util::SecretData key, const EVP_AEAD* aead)
+      : key_(std::move(key)), aead_(aead) {}
 
-  const std::string key_;
-  const EVP_AEAD* aead_;
+  const util::SecretData key_;
+  const EVP_AEAD* const aead_;
 };
 
 }  // namespace subtle

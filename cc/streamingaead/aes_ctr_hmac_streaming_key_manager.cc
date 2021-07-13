@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -16,6 +18,7 @@
 
 #include "tink/subtle/aes_ctr_hmac_streaming.h"
 #include "tink/subtle/random.h"
+#include "tink/util/input_stream_util.h"
 #include "tink/util/status.h"
 #include "tink/util/validation.h"
 
@@ -80,6 +83,25 @@ AesCtrHmacStreamingKeyManager::CreateKey(
   return key;
 };
 
+crypto::tink::util::StatusOr<google::crypto::tink::AesCtrHmacStreamingKey>
+AesCtrHmacStreamingKeyManager::DeriveKey(
+    const google::crypto::tink::AesCtrHmacStreamingKeyFormat& key_format,
+    InputStream* input_stream) const {
+  crypto::tink::util::Status status =
+      ValidateVersion(key_format.version(), get_version());
+  if (!status.ok()) return status;
+
+  crypto::tink::util::StatusOr<std::string> randomness_or =
+      ReadBytesFromStream(key_format.key_size(), input_stream);
+  if (!randomness_or.ok()) {
+    return randomness_or.status();
+  }
+  AesCtrHmacStreamingKey key;
+  key.set_version(get_version());
+  key.set_key_value(randomness_or.ValueOrDie());
+  *key.mutable_params() = key_format.params();
+  return key;
+}
 
 Status AesCtrHmacStreamingKeyManager::ValidateKey(
     const AesCtrHmacStreamingKey& key) const {

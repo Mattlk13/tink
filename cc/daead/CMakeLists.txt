@@ -1,3 +1,5 @@
+add_subdirectory(subtle)
+
 tink_module(daead)
 
 tink_cc_library(
@@ -11,11 +13,14 @@ tink_cc_library(
     tink::subtle::random
     tink::util::constants
     tink::util::errors
+    tink::util::input_stream_util
     tink::util::protobuf_helper
+    tink::util::secret_data
     tink::util::status
     tink::util::statusor
     tink::util::validation
     tink::proto::aes_siv_cc_proto
+    absl::memory
     absl::strings
 )
 
@@ -45,6 +50,7 @@ tink_cc_library(
     tink::daead::aes_siv_key_manager
     tink::daead::deterministic_aead_wrapper
     tink::config::config_util
+    tink::config::tink_fips
     tink::mac::mac_config
     tink::util::status
     tink::proto::config_cc_proto
@@ -88,6 +94,8 @@ tink_cc_test(
   DEPS
     tink::daead::aes_siv_key_manager
     tink::core::deterministic_aead
+    tink::util::istream_input_stream
+    tink::util::secret_data
     tink::util::status
     tink::util::statusor
     tink::proto::aes_siv_cc_proto
@@ -115,6 +123,7 @@ tink_cc_test(
     tink::daead::aes_siv_key_manager
     tink::daead::deterministic_aead_config
     tink::daead::deterministic_aead_key_templates
+    tink::config::tink_fips
     tink::core::config
     tink::core::deterministic_aead
     tink::core::keyset_handle
@@ -136,6 +145,7 @@ tink_cc_test(
     tink::core::crypto_format
     tink::core::deterministic_aead
     tink::core::keyset_handle
+    tink::internal::key_info
     tink::util::test_keyset_handle
     tink::util::status
     tink::util::test_util

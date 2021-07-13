@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -22,7 +24,7 @@ import (
 	"github.com/google/tink/go/core/cryptofmt"
 	"github.com/google/tink/go/core/primitiveset"
 	"github.com/google/tink/go/testutil"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 func createKeyset() []*tinkpb.Keyset_Key {
@@ -65,6 +67,7 @@ func TestPrimitiveSetBasic(t *testing.T) {
 	ps.Primary = entries[primaryID]
 
 	// check raw primitive
+	rawIDs := []uint32{keys[3].GetKeyId(), keys[4].GetKeyId()}
 	rawMacs := []testutil.DummyMAC{macs[3], macs[4]}
 	rawStatuses := []tinkpb.KeyStatusType{keys[3].Status, keys[4].Status}
 	rawPrefixTypes := []tinkpb.OutputPrefixType{keys[3].OutputPrefixType, keys[4].OutputPrefixType}
@@ -72,10 +75,11 @@ func TestPrimitiveSetBasic(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error when getting raw primitives: %s", err)
 	}
-	if !validateEntryList(rawEntries, rawMacs, rawStatuses, rawPrefixTypes) {
+	if !validateEntryList(rawEntries, rawIDs, rawMacs, rawStatuses, rawPrefixTypes) {
 		t.Errorf("raw primitives do not match input")
 	}
 	// check tink primitives, same id
+	tinkIDs := []uint32{keys[0].GetKeyId(), keys[5].GetKeyId()}
 	tinkMacs := []testutil.DummyMAC{macs[0], macs[5]}
 	tinkStatuses := []tinkpb.KeyStatusType{keys[0].Status, keys[5].Status}
 	tinkPrefixTypes := []tinkpb.OutputPrefixType{keys[0].OutputPrefixType, keys[5].OutputPrefixType}
@@ -84,10 +88,11 @@ func TestPrimitiveSetBasic(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error when getting primitives: %s", err)
 	}
-	if !validateEntryList(tinkEntries, tinkMacs, tinkStatuses, tinkPrefixTypes) {
+	if !validateEntryList(tinkEntries, tinkIDs, tinkMacs, tinkStatuses, tinkPrefixTypes) {
 		t.Errorf("tink primitives do not match the input key")
 	}
 	// check another tink primitive
+	tinkIDs = []uint32{keys[2].GetKeyId()}
 	tinkMacs = []testutil.DummyMAC{macs[2]}
 	tinkStatuses = []tinkpb.KeyStatusType{keys[2].Status}
 	tinkPrefixTypes = []tinkpb.OutputPrefixType{keys[2].OutputPrefixType}
@@ -96,10 +101,11 @@ func TestPrimitiveSetBasic(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error when getting tink primitives: %s", err)
 	}
-	if !validateEntryList(tinkEntries, tinkMacs, tinkStatuses, tinkPrefixTypes) {
+	if !validateEntryList(tinkEntries, tinkIDs, tinkMacs, tinkStatuses, tinkPrefixTypes) {
 		t.Errorf("tink primitives do not match the input key")
 	}
 	//check legacy primitives
+	legacyIDs := []uint32{keys[1].GetKeyId()}
 	legacyMacs := []testutil.DummyMAC{macs[1]}
 	legacyStatuses := []tinkpb.KeyStatusType{keys[1].Status}
 	legacyPrefixTypes := []tinkpb.OutputPrefixType{keys[1].OutputPrefixType}
@@ -108,7 +114,7 @@ func TestPrimitiveSetBasic(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error when getting legacy primitives: %s", err)
 	}
-	if !validateEntryList(legacyEntries, legacyMacs, legacyStatuses, legacyPrefixTypes) {
+	if !validateEntryList(legacyEntries, legacyIDs, legacyMacs, legacyStatuses, legacyPrefixTypes) {
 		t.Errorf("legacy primitives do not match the input key")
 	}
 }
@@ -137,6 +143,7 @@ func TestAddWithInvalidInput(t *testing.T) {
 }
 
 func validateEntryList(entries []*primitiveset.Entry,
+	keyIDs []uint32,
 	macs []testutil.DummyMAC,
 	statuses []tinkpb.KeyStatusType,
 	prefixTypes []tinkpb.OutputPrefixType) bool {
@@ -144,7 +151,7 @@ func validateEntryList(entries []*primitiveset.Entry,
 		return false
 	}
 	for i := 0; i < len(entries); i++ {
-		if !validateEntry(entries[i], macs[i], statuses[i], prefixTypes[i]) {
+		if !validateEntry(entries[i], keyIDs[i], macs[i], statuses[i], prefixTypes[i]) {
 			return false
 		}
 	}
@@ -153,10 +160,11 @@ func validateEntryList(entries []*primitiveset.Entry,
 
 // Compares an entry with the testutil.DummyMAC that was used to create the entry
 func validateEntry(entry *primitiveset.Entry,
+	keyID uint32,
 	testMac testutil.DummyMAC,
 	status tinkpb.KeyStatusType,
 	outputPrefixType tinkpb.OutputPrefixType) bool {
-	if entry.Status != status || entry.PrefixType != outputPrefixType {
+	if entry.KeyID != keyID || entry.Status != status || entry.PrefixType != outputPrefixType {
 		return false
 	}
 	var dummyMac = entry.Primitive.(testutil.DummyMAC)

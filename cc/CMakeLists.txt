@@ -2,13 +2,22 @@ add_subdirectory(aead)
 add_subdirectory(config)
 add_subdirectory(daead)
 add_subdirectory(hybrid)
+add_subdirectory(internal)
 add_subdirectory(mac)
+add_subdirectory(jwt)
+add_subdirectory(prf)
 add_subdirectory(signature)
 add_subdirectory(streamingaead)
 add_subdirectory(subtle)
 add_subdirectory(util)
 
 tink_module(core)
+
+# configuration settings for the build
+option(USE_ONLY_FIPS "Enables the FIPS only mode in Tink" OFF)
+if(USE_ONLY_FIPS)
+    add_definitions(-DTINK_USE_ONLY_FIPS)
+endif()
 
 # public libraries
 
@@ -46,6 +55,7 @@ set(TINK_PUBLIC_APIS
   mac_config.h
   mac_factory.h
   mac_key_templates.h
+  output_stream_with_result.h
   output_stream.h
   public_key_sign.h
   public_key_sign_factory.h
@@ -58,6 +68,7 @@ set(TINK_PUBLIC_APIS
   streaming_aead.h
   streaming_aead_config.h
   streaming_aead_key_templates.h
+  streaming_mac.h
   tink_config.h
   "${TINK_VERSION_H}"
 )
@@ -79,6 +90,7 @@ set(TINK_PUBLIC_API_DEPS
   tink::core::keyset_reader
   tink::core::keyset_writer
   tink::core::kms_client
+  tink::core::output_stream_with_result
   tink::core::output_stream
   tink::core::public_key_sign
   tink::core::public_key_verify
@@ -86,8 +98,8 @@ set(TINK_PUBLIC_API_DEPS
   tink::core::primitive_set
   tink::core::random_access_stream
   tink::core::registry
-  tink::core::registry_impl
   tink::core::streaming_aead
+  tink::core::streaming_mac
   tink::core::version
   tink::aead::aead_config
   tink::aead::aead_factory
@@ -100,6 +112,8 @@ set(TINK_PUBLIC_API_DEPS
   tink::hybrid::hybrid_decrypt_factory
   tink::hybrid::hybrid_encrypt_factory
   tink::hybrid::hybrid_key_templates
+  tink::internal::key_info
+  tink::internal::registry_impl
   tink::mac::mac_config
   tink::mac::mac_factory
   tink::mac::mac_key_templates
@@ -156,6 +170,15 @@ tink_cc_library(
 )
 
 tink_cc_library(
+  NAME output_stream_with_result
+  SRCS output_stream_with_result.h
+  DEPS
+    tink::core::output_stream_with_result
+    tink::util::status
+    tink::util::statusor
+)
+
+tink_cc_library(
   NAME aead
   SRCS aead.h
   DEPS
@@ -178,6 +201,16 @@ tink_cc_library(
     tink::core::input_stream
     tink::core::output_stream
     tink::core::random_access_stream
+    tink::util::statusor
+    absl::strings
+)
+
+tink_cc_library(
+  NAME streaming_mac
+  SRCS streaming_mac.h
+  DEPS
+    tink::core::output_stream_with_result
+    tink::util::status
     tink::util::statusor
     absl::strings
 )
@@ -369,35 +402,11 @@ tink_cc_library(
   NAME registry
   SRCS registry.h
   DEPS
-    tink::core::registry_impl
+    tink::config::tink_fips
+    tink::internal::registry_impl
     tink::util::status
     tink::util::statusor
     absl::strings
-)
-
-tink_cc_library(
-  NAME registry_impl
-  SRCS
-    core/registry_impl.cc
-    core/registry_impl.h
-  DEPS
-    tink::core::catalogue
-    tink::core::key_manager
-    tink::core::key_type_manager
-    tink::core::key_manager_impl
-    tink::core::private_key_manager_impl
-    tink::core::private_key_type_manager
-    tink::core::primitive_set
-    tink::core::primitive_wrapper
-    tink::util::errors
-    tink::util::protobuf_helper
-    tink::util::status
-    tink::util::statusor
-    tink::util::validation
-    tink::proto::tink_cc_proto
-    absl::base
-    absl::strings
-    absl::synchronization
 )
 
 configure_file(version.h.templ "${TINK_VERSION_H}")
@@ -421,8 +430,11 @@ tink_cc_library(
     tink::core::keyset_writer
     tink::core::primitive_set
     tink::core::registry
+    tink::internal::key_info
     tink::util::errors
+    tink::util::keyset_util
     tink::proto::tink_cc_proto
+    absl::base
     absl::memory
 )
 
@@ -450,20 +462,6 @@ tink_cc_library(
     tink::util::status
     tink::util::statusor
     tink::proto::tink_cc_proto
-    absl::memory
-    absl::strings
-)
-
-tink_cc_library(
-  NAME key_manager_base
-  SRCS core/key_manager_base.h
-  DEPS
-    tink::core::key_manager
-    tink::util::constants
-    tink::util::errors
-    tink::util::statusor
-    tink::proto::tink_cc_proto
-    absl::base
     absl::memory
     absl::strings
 )
@@ -528,8 +526,9 @@ tink_cc_library(
   SRCS
     core/key_type_manager.h
   DEPS
-    absl::hash
-    absl::flat_hash_map
+    absl::strings
+    tink::core::input_stream
+    tink::internal::fips_utils
     tink::proto::tink_cc_proto
     tink::util::status
     tink::util::statusor
@@ -544,7 +543,10 @@ tink_cc_library(
     tink::core::key_type_manager
     tink::proto::tink_cc_proto
     tink::util::constants
-    tink::util::statusor
+    tink::util::status
+    absl::base
+    absl::memory
+    absl::strings
 )
 
 tink_cc_library(
@@ -567,77 +569,7 @@ tink_cc_library(
     tink::util::validation
 )
 
-if (TINK_BUILD_SHARED_LIB)
-  add_library(tink SHARED
-    ${TINK_PUBLIC_APIS}
-    version_script.lds
-    exported_symbols.lds
-  )
-
-  if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_link_libraries(tink
-      PRIVATE
-        -fuse-ld=gold  # GNU ld does not support ICF.
-        -Wl,--version-script="${CMAKE_CURRENT_SOURCE_DIR}/version_script.lds"
-        -Wl,--gc-sections
-        -Wl,--icf=all
-        -Wl,--strip-all
-    )
-  elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    target_link_libraries(tink
-      PRIVATE
-        -Wl,-install_name,@rpath/libtink.so
-        -Wl,-exported_symbols_list="${CMAKE_CURRENT_SOURCE_DIR}/exported_symbols.lds"
-        -Wl,-x
-        -Wl,-dead_strip
-    )
-  else()
-    message(FATAL_ERROR "libtink not yet supported on your platform")
-  endif()
-
-  target_include_directories(tink PUBLIC ${TINK_INCLUDE_DIRS})
-  target_link_libraries(tink
-    PRIVATE
-      -Wl,--whole-archive
-      ${TINK_PUBLIC_API_DEPS}
-      -Wl,--no-whole-archive
-  )
-  set_target_properties(tink PROPERTIES SOVERSION ${TINK_VERSION_LABEL})
-
-  install(TARGETS tink EXPORT Tink LIBRARY DESTINATION "lib")
-endif()
-
 # tests
-
-tink_cc_test(
-  NAME registry_test
-  SRCS core/registry_test.cc
-  DEPS
-    tink::core::aead
-    tink::core::catalogue
-    tink::core::crypto_format
-    tink::core::key_manager_impl
-    tink::core::key_type_manager
-    tink::core::keyset_manager
-    tink::core::registry
-    tink::aead::aead_wrapper
-    tink::aead::aes_gcm_key_manager
-    tink::hybrid::ecies_aead_hkdf_private_key_manager
-    tink::hybrid::ecies_aead_hkdf_public_key_manager
-    tink::util::test_keyset_handle
-    tink::util::protobuf_helper
-    tink::util::status
-    tink::util::statusor
-    tink::util::test_util
-    tink::util::test_matchers
-    tink::proto::aes_ctr_hmac_aead_cc_proto
-    tink::proto::aes_gcm_cc_proto
-    tink::proto::common_cc_proto
-    tink::proto::ecdsa_cc_proto
-    tink::proto::tink_cc_proto
-    absl::memory
-    gmock
-)
 
 tink_cc_test(
   NAME version_test
@@ -671,6 +603,7 @@ tink_cc_test(
   DEPS
     tink::core::json_keyset_reader
     tink::util::protobuf_helper
+    tink::util::test_matchers
     tink::util::test_util
     tink::proto::aes_eax_cc_proto
     tink::proto::aes_gcm_cc_proto
@@ -685,6 +618,7 @@ tink_cc_test(
     tink::core::json_keyset_reader
     tink::core::json_keyset_writer
     tink::util::protobuf_helper
+    tink::util::test_matchers
     tink::util::test_util
     tink::proto::aes_eax_cc_proto
     tink::proto::aes_gcm_cc_proto
@@ -819,10 +753,12 @@ tink_cc_test(
     tink::proto::tink_cc_proto
     tink::subtle::aes_gcm_boringssl
     tink::subtle::random
+    tink::util::secret_data
     tink::util::status
     tink::util::statusor
     tink::util::test_matchers
     tink::util::validation
+    absl::memory
 )
 
 tink_cc_test(
@@ -834,6 +770,9 @@ tink_cc_test(
     tink::proto::aes_gcm_cc_proto
     tink::proto::tink_cc_proto
     tink::subtle::aes_gcm_boringssl
+    tink::util::input_stream_util
+    tink::util::istream_input_stream
+    tink::util::secret_data
     tink::util::status
     tink::util::statusor
     tink::util::test_matchers

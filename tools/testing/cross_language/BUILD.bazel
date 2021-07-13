@@ -1,4 +1,4 @@
-package(default_visibility = ["//tools/build_defs:internal_pkg"])
+package(default_visibility = ["//:__subpackages__"])
 
 licenses(["notice"])
 
@@ -10,130 +10,21 @@ filegroup(
 )
 
 sh_test(
-    name = "keyset_reader_writer_test",
-    size = "small",
-    srcs = [
-        "keyset_reader_writer_test.sh",
-    ],
-    data = [
-        ":test_lib",
-        "//tools/testing/cc:keyset_reader_writer_cli",
-        "//tools/tinkey",
-    ],
-)
-
-sh_test(
-    name = "version_test",
+    name = "aead_envelope_test",
     size = "medium",
     srcs = [
-        "version_test.sh",
+        "aead_envelope_test.sh",
     ],
     data = [
         ":test_lib",
-        "//:tink_version",
-        "//tools/testing:version_cli_java",
-        "//tools/testing/cc:version_cli_cc",
+        "//testing:aead_cli_java",
+        "//testing/cc:aead_cli_cc",
+        "//testing/go:aead_cli_go",
+        "//testing/go:generate_envelope_keyset",
+        "//testing/python:aead_cli_python",
+        "//tinkey",
+        "@google_root_pem//file",
+        "@tink_base//testdata:credentials",
     ],
-)
-
-sh_test(
-    name = "aead_test",
-    size = "medium",
-    srcs = [
-        "aead_test.sh",
-    ],
-    data = [
-        ":test_lib",
-        "//tools/testing:aead_cli_java",
-        "//tools/testing/cc:aead_cli_cc",
-        "//tools/testing/go:aead_cli_go",
-        "//tools/testing/go:generate_envelope_keyset",
-        "//tools/tinkey",
-        "//testdata:credentials",
-    ],
-    args = select({
-      "//tools/remote_build_execution:rbe": ["--no_external_tests"],
-      "//conditions:default": [],
-    }),
-)
-
-sh_test(
-    name = "deterministic_aead_test",
-    size = "medium",
-    srcs = [
-        "deterministic_aead_test.sh",
-    ],
-    data = [
-        ":test_lib",
-        "//tools/testing:deterministic_aead_cli_java",
-        "//tools/testing/cc:deterministic_aead_cli_cc",
-        "//tools/testing/go:deterministic_aead_cli_go",
-        "//tools/tinkey",
-    ],
-)
-
-sh_test(
-    name = "streaming_aead_test",
-    size = "medium",
-    srcs = [
-        "streaming_aead_test.sh",
-    ],
-    data = [
-        ":test_lib",
-        "//tools/testing:streaming_aead_cli_java",
-        "//tools/testing/cc:streaming_aead_cli_cc",
-        "//tools/tinkey",
-    ],
-)
-
-sh_test(
-    name = "mac_test",
-    size = "medium",
-    srcs = [
-        "mac_test.sh",
-    ],
-    data = [
-        ":test_lib",
-        "//tools/testing:mac_cli_java",
-        "//tools/testing/cc:mac_cli_cc",
-        "//tools/testing/go:mac_cli_go",
-        "//tools/tinkey",
-    ],
-)
-
-sh_test(
-    name = "hybrid_encryption_test",
-    size = "medium",
-    srcs = [
-        "hybrid_encryption_test.sh",
-    ],
-    data = [
-        ":test_lib",
-        "//tools/testing:hybrid_decrypt_cli_java",
-        "//tools/testing:hybrid_encrypt_cli_java",
-        "//tools/testing/cc:hybrid_decrypt_cli_cc",
-        "//tools/testing/cc:hybrid_encrypt_cli_cc",
-        "//tools/testing/go:hybrid_encrypt_cli_go",
-        "//tools/testing/go:hybrid_decrypt_cli_go",
-        "//tools/tinkey",
-    ],
-)
-
-sh_test(
-    name = "signature_test",
-    size = "large",
-    timeout = "long",
-    srcs = [
-        "signature_test.sh",
-    ],
-    data = [
-        ":test_lib",
-        "//tools/testing:public_key_sign_cli_java",
-        "//tools/testing:public_key_verify_cli_java",
-        "//tools/testing/cc:public_key_sign_cli_cc",
-        "//tools/testing/cc:public_key_verify_cli_cc",
-        "//tools/testing/go:public_key_sign_cli_go",
-        "//tools/testing/go:public_key_verify_cli_go",
-        "//tools/tinkey",
-    ],
+    tags = ["no_rbe"],
 )

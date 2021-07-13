@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -21,7 +23,7 @@
 #include "tink/integration/gcpkms/gcp_kms_client.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
-#include "tools/testing/cc/cli_util.h"
+#include "testing/cc/cli_util.h"
 
 using crypto::tink::Aead;
 using crypto::tink::integration::gcpkms::GcpKmsClient;
@@ -33,7 +35,7 @@ using crypto::tink::integration::gcpkms::GcpKmsClient;
 //   operation: the actual AEAD-operation, i.e. "encrypt" or "decrypt"
 //   input-file:  name of the file with input (plaintext for encryption, or
 //                or ciphertext for decryption)
-//   associated-data:  a std::string to be used as associated data
+//   associated-data:  a string to be used as associated data
 //   output-file:  name of the file for the resulting output
 int main(int argc, char** argv) {
   if (argc != 7) {

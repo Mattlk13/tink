@@ -16,9 +16,12 @@
 
 #include "tink/subtle/encrypt_then_authenticate.h"
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
+#include "absl/strings/string_view.h"
+#include "absl/strings/str_cat.h"
 #include "tink/aead.h"
 #include "tink/mac.h"
 #include "tink/subtle/ind_cpa_cipher.h"
@@ -44,8 +47,8 @@ static const std::string longToBigEndianStr(uint64_t value) {
 util::StatusOr<std::unique_ptr<Aead>> EncryptThenAuthenticate::New(
     std::unique_ptr<IndCpaCipher> ind_cpa_cipher, std::unique_ptr<Mac> mac,
     uint8_t tag_size) {
-  if (tag_size < MIN_TAG_SIZE_IN_BYTES) {
-    return util::Status(util::error::INTERNAL, "tag size too small");
+  if (tag_size < kMinTagSizeInBytes) {
+    return util::Status(util::error::INVALID_ARGUMENT, "tag size too small");
   }
   std::unique_ptr<Aead> aead(new EncryptThenAuthenticate(
       std::move(ind_cpa_cipher), std::move(mac), tag_size));
@@ -53,22 +56,27 @@ util::StatusOr<std::unique_ptr<Aead>> EncryptThenAuthenticate::New(
 }
 
 util::StatusOr<std::string> EncryptThenAuthenticate::Encrypt(
-    absl::string_view plaintext,
-    absl::string_view additional_data) const {
+    absl::string_view plaintext, absl::string_view additional_data) const {
   // BoringSSL expects a non-null pointer for plaintext and additional_data,
   // regardless of whether the size is 0.
   plaintext = SubtleUtilBoringSSL::EnsureNonNull(plaintext);
   additional_data = SubtleUtilBoringSSL::EnsureNonNull(additional_data);
+
+  uint64_t aad_size_in_bytes = additional_data.size();
+  uint64_t aad_size_in_bits = aad_size_in_bytes * 8;
+  if (aad_size_in_bits / 8 != aad_size_in_bytes /* overflow occured! */) {
+    return util::Status(util::error::INVALID_ARGUMENT,
+                        "additional data too long");
+  }
 
   auto ct = ind_cpa_cipher_->Encrypt(plaintext);
   if (!ct.ok()) {
     return ct.status();
   }
   std::string ciphertext(ct.ValueOrDie());
-  std::string toAuthData(additional_data);
-  toAuthData.append(ciphertext);
-  uint64_t aad_size_in_bits = additional_data.size() * 8;
-  toAuthData.append(longToBigEndianStr(aad_size_in_bits));
+  std::string toAuthData = absl::StrCat(additional_data, ciphertext,
+                                        longToBigEndianStr(aad_size_in_bits));
+
   auto tag = mac_->ComputeMac(toAuthData);
   if (!tag.ok()) {
     return tag.status();
@@ -80,24 +88,28 @@ util::StatusOr<std::string> EncryptThenAuthenticate::Encrypt(
 }
 
 util::StatusOr<std::string> EncryptThenAuthenticate::Decrypt(
-    absl::string_view ciphertext,
-    absl::string_view additional_data) const {
+    absl::string_view ciphertext, absl::string_view additional_data) const {
   // BoringSSL expects a non-null pointer for additional_data,
   // regardless of whether the size is 0.
   additional_data = SubtleUtilBoringSSL::EnsureNonNull(additional_data);
 
   if (ciphertext.size() < tag_size_) {
-    return util::Status(util::error::INTERNAL, "ciphertext too short");
+    return util::Status(util::error::INVALID_ARGUMENT, "ciphertext too short");
   }
 
-  std::string payload = std::string(ciphertext.data(), ciphertext.size())
-                            .substr(0, ciphertext.size() - tag_size_);
-  std::string toAuthData(additional_data);
-  toAuthData.append(payload);
-  uint64_t aad_size_in_bits = additional_data.size() * 8;
-  toAuthData.append(longToBigEndianStr(aad_size_in_bits));
-  auto verified = mac_->VerifyMac(
-      ciphertext.substr(ciphertext.size() - tag_size_, tag_size_), toAuthData);
+  uint64_t aad_size_in_bytes = additional_data.size();
+  uint64_t aad_size_in_bits = aad_size_in_bytes * 8;
+  if (aad_size_in_bits / 8 != aad_size_in_bytes /* overflow occured! */) {
+    return util::Status(util::error::INVALID_ARGUMENT,
+                        "additional data too long");
+  }
+
+  auto payload = ciphertext.substr(0, ciphertext.size() - tag_size_);
+  auto tag = ciphertext.substr(ciphertext.size() - tag_size_, tag_size_);
+  std::string toAuthData = absl::StrCat(additional_data, payload,
+                                        longToBigEndianStr(aad_size_in_bits));
+
+  auto verified = mac_->VerifyMac(tag, toAuthData);
   if (!verified.ok()) {
     return verified;
   }

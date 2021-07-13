@@ -23,11 +23,14 @@
 #include "openssl/curve25519.h"
 #include "tink/public_key_sign.h"
 #include "tink/public_key_verify.h"
+#include "tink/config/tink_fips.h"
 #include "tink/subtle/ed25519_verify_boringssl.h"
 #include "tink/subtle/random.h"
 #include "tink/subtle/subtle_util_boringssl.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
+#include "tink/util/test_matchers.h"
 #include "tink/util/test_util.h"
 
 namespace crypto {
@@ -35,9 +38,15 @@ namespace tink {
 namespace subtle {
 namespace {
 
+using ::crypto::tink::test::StatusIs;
+
 class Ed25519SignBoringSslTest : public ::testing::Test {};
 
 TEST_F(Ed25519SignBoringSslTest, testBasicSign) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Test assumes kOnlyUseFips is false.";
+  }
+
   // Generate a new key pair.
   uint8_t out_public_key[ED25519_PUBLIC_KEY_LEN];
   uint8_t out_private_key[ED25519_PRIVATE_KEY_LEN];
@@ -45,9 +54,10 @@ TEST_F(Ed25519SignBoringSslTest, testBasicSign) {
   ED25519_keypair(out_public_key, out_private_key);
 
   std::string public_key(reinterpret_cast<const char *>(out_public_key),
-                    ED25519_PUBLIC_KEY_LEN);
-  std::string private_key(reinterpret_cast<const char *>(out_private_key),
-                     ED25519_PRIVATE_KEY_LEN);
+                         ED25519_PUBLIC_KEY_LEN);
+  util::SecretData private_key =
+      util::SecretDataFromStringView(absl::string_view(
+          reinterpret_cast<char *>(out_private_key), ED25519_PRIVATE_KEY_LEN));
 
   // Create a new signer.
   auto signer_result = Ed25519SignBoringSsl::New(private_key);
@@ -87,21 +97,25 @@ TEST_F(Ed25519SignBoringSslTest, testBasicSign) {
 }
 
 TEST_F(Ed25519SignBoringSslTest, testInvalidPrivateKeys) {
-  // Null private key.
-  const absl::string_view null_private_key;
-  EXPECT_FALSE(Ed25519SignBoringSsl::New(null_private_key).ok());
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Test assumes kOnlyUseFips is false.";
+  }
 
   for (int keysize = 0; keysize < 128; keysize++) {
     if (keysize == ED25519_PRIVATE_KEY_LEN) {
       // Valid key size.
       continue;
     }
-    std::string key(keysize, 'x');
+    util::SecretData key(keysize, 'x');
     EXPECT_FALSE(Ed25519SignBoringSsl::New(key).ok());
   }
 }
 
 TEST_F(Ed25519SignBoringSslTest, testMessageEmptyVersusNullStringView) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Test assumes kOnlyUseFips is false.";
+  }
+
   // Generate a new key pair.
   uint8_t out_public_key[ED25519_PUBLIC_KEY_LEN];
   uint8_t out_private_key[ED25519_PRIVATE_KEY_LEN];
@@ -109,9 +123,10 @@ TEST_F(Ed25519SignBoringSslTest, testMessageEmptyVersusNullStringView) {
   ED25519_keypair(out_public_key, out_private_key);
 
   std::string public_key(reinterpret_cast<const char *>(out_public_key),
-                    ED25519_PUBLIC_KEY_LEN);
-  std::string private_key(reinterpret_cast<const char *>(out_private_key),
-                     ED25519_PRIVATE_KEY_LEN);
+                         ED25519_PUBLIC_KEY_LEN);
+  util::SecretData private_key =
+      util::SecretDataFromStringView(absl::string_view(
+          reinterpret_cast<char *>(out_private_key), ED25519_PRIVATE_KEY_LEN));
 
   // Create a new signer.
   auto signer_result = Ed25519SignBoringSsl::New(private_key);
@@ -131,7 +146,7 @@ TEST_F(Ed25519SignBoringSslTest, testMessageEmptyVersusNullStringView) {
   auto status = verifier->Verify(signature, empty_message);
   EXPECT_TRUE(status.ok()) << status;
 
-  // Message is an empty std::string.
+  // Message is an empty string.
   const std::string message = "";
   signature = signer->Sign(message).ValueOrDie();
   EXPECT_EQ(signature.size(), ED25519_SIGNATURE_LEN);
@@ -139,24 +154,28 @@ TEST_F(Ed25519SignBoringSslTest, testMessageEmptyVersusNullStringView) {
   status = verifier->Verify(signature, message);
   EXPECT_TRUE(status.ok()) << status;
 
-  // Message is a null ptr.
-  signature = signer->Sign(nullptr).ValueOrDie();
+  // Message is a default constructed string_view.
+  signature = signer->Sign(absl::string_view()).ValueOrDie();
   EXPECT_EQ(signature.size(), ED25519_SIGNATURE_LEN);
-  status = verifier->Verify(signature, nullptr);
+  status = verifier->Verify(signature, absl::string_view());
   EXPECT_TRUE(status.ok()) << status;
 }
 
-typedef struct testVector {
+struct TestVector {
   std::string public_key;
   std::string private_key;
   std::string expected_signature;
   std::string message;
-} testVector;
+};
 
 TEST_F(Ed25519SignBoringSslTest, testWithTestVectors) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Test assumes kOnlyUseFips is false.";
+  }
+
   // These test vectors are taken from:
   // https://tools.ietf.org/html/draft-josefsson-eddsa-ed25519-02#section-6.
-  testVector Ed25519Vectors[] = {
+  TestVector ed25519_vectors[] = {
       {
           /*TEST 1*/
           /*public_key= */ test::HexDecodeOrDie(
@@ -283,10 +302,11 @@ TEST_F(Ed25519SignBoringSslTest, testWithTestVectors) {
       },
   };
 
-  for (const testVector v : Ed25519Vectors) {
+  for (const TestVector &v : ed25519_vectors) {
     // Add the public as a suffix to the private key. This is needed by the
     // boringssl API.
-    std::string private_key = absl::StrCat(v.private_key, v.public_key);
+    util::SecretData private_key = util::SecretDataFromStringView(
+        absl::StrCat(v.private_key, v.public_key));
 
     // Create a new signer.
     auto signer_result = Ed25519SignBoringSsl::New(private_key);
@@ -304,6 +324,21 @@ TEST_F(Ed25519SignBoringSslTest, testWithTestVectors) {
     auto status = verifier->Verify(signature, v.message);
     EXPECT_TRUE(status.ok()) << status;
   }
+}
+
+TEST_F(Ed25519SignBoringSslTest, testFipsMode) {
+  if (!IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Test assumes kOnlyUseFips.";
+  }
+
+  // Generate a new key pair.
+  uint8_t out_public_key[ED25519_PUBLIC_KEY_LEN];
+  util::SecretData private_key(ED25519_PRIVATE_KEY_LEN);
+  ED25519_keypair(out_public_key, private_key.data());
+
+  // Create a new signer.
+  EXPECT_THAT(Ed25519SignBoringSsl::New(private_key).status(),
+              StatusIs(util::error::INTERNAL));
 }
 
 }  // namespace

@@ -16,10 +16,10 @@
 #ifndef TINK_MAC_HMAC_KEY_MANAGER_H_
 #define TINK_MAC_HMAC_KEY_MANAGER_H_
 
-#include <algorithm>
-#include <vector>
+#include <string>
 
-#include "absl/strings/string_view.h"
+#include "absl/memory/memory.h"
+#include "absl/strings/str_cat.h"
 #include "tink/core/key_type_manager.h"
 #include "tink/mac.h"
 #include "tink/subtle/hmac_boringssl.h"
@@ -27,6 +27,7 @@
 #include "tink/util/enums.h"
 #include "tink/util/errors.h"
 #include "tink/util/protobuf_helper.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
 #include "proto/hmac.pb.h"
@@ -44,7 +45,8 @@ class HmacKeyManager
         const google::crypto::tink::HmacKey& hmac_key) const override {
       return subtle::HmacBoringSsl::New(
           util::Enums::ProtoToSubtle(hmac_key.params().hash()),
-          hmac_key.params().tag_size(), hmac_key.key_value());
+          hmac_key.params().tag_size(),
+          util::SecretDataFromStringView(hmac_key.key_value()));
     }
   };
 
@@ -59,7 +61,6 @@ class HmacKeyManager
 
   const std::string& get_key_type() const override { return key_type_; }
 
-
   crypto::tink::util::Status ValidateKey(
       const google::crypto::tink::HmacKey& key) const override;
 
@@ -69,10 +70,17 @@ class HmacKeyManager
   crypto::tink::util::StatusOr<google::crypto::tink::HmacKey> CreateKey(
       const google::crypto::tink::HmacKeyFormat& key_format) const override;
 
+  crypto::tink::util::StatusOr<google::crypto::tink::HmacKey> DeriveKey(
+      const google::crypto::tink::HmacKeyFormat& key_format,
+      InputStream* input_stream) const override;
+
+  internal::FipsCompatibility FipsStatus() const override {
+    return internal::FipsCompatibility::kRequiresBoringCrypto;
+  }
+
  private:
   crypto::tink::util::Status ValidateParams(
       const google::crypto::tink::HmacParams& params) const;
-
 
   const std::string key_type_ = absl::StrCat(
       kTypeGoogleapisCom, google::crypto::tink::HmacKey().GetTypeName());

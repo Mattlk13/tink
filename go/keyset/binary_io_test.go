@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -24,7 +26,7 @@ import (
 	"github.com/google/tink/go/testkeyset"
 	"github.com/google/tink/go/testutil"
 
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 func TestBinaryIOUnencrypted(t *testing.T) {
@@ -66,10 +68,10 @@ func TestBinaryIOEncrypted(t *testing.T) {
 
 	kse2, err := r.ReadEncrypted()
 	if err != nil {
-		t.Fatalf("cannot read encryped keyset: %v", err)
+		t.Fatalf("cannot read encrypted keyset: %v", err)
 	}
 
 	if !proto.Equal(kse1, kse2) {
-		t.Errorf("written encryped keyset (%s) doesn't match read encryped keyset (%s)", kse1, kse2)
+		t.Errorf("written encrypted keyset (%s) doesn't match read encrypted keyset (%s)", kse1, kse2)
 	}
 }

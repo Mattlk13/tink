@@ -1,160 +1,61 @@
-package(
-    default_visibility = ["//tools/build_defs:internal_pkg"],
+load("@npm//@bazel/karma:index.bzl", "karma_web_test_suite")
+load("@npm//@bazel/typescript:index.bzl", "ts_library")
+load("@tink_angular//:ng_package.bzl", "ng_package")
+
+package(default_visibility = ["//:__subpackages__"])
+
+ts_library(
+    name = "javascript",
+    srcs = [
+        "index.ts",
+        "keyset_handle.ts",
+    ],
+    module_name = "tink-crypto",
+    deps = [
+        "//aead",
+        "//aead/subtle",
+        "//binary",
+        "//binary/insecure",
+        "//hybrid",
+        "//internal",
+        "//mac",
+        "//mac/subtle",
+        "//signature",
+        "//signature/subtle",
+        "//testing",
+    ],
 )
 
-licenses(["notice"])
-
-load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_library", "closure_js_test")
-
-closure_js_library(
-    name = "primitives",
-    srcs = [
-        "aead.js",
-        "hybrid_decrypt.js",
-        "hybrid_encrypt.js",
-        "mac.js",
-        "public_key_sign.js",
-        "public_key_verify.js",
+karma_web_test_suite(
+    name = "unit_tests",
+    browsers = [
+        "@io_bazel_rules_webtesting//browsers:chromium-local",
+        "@io_bazel_rules_webtesting//browsers:firefox-local",
+    ],
+    tags = [
+        "native",
+        "no_rbe",
     ],
     deps = [
-        "//javascript/exception",
-        "@io_bazel_rules_closure//closure/library",
+        "//aead:aead_tests",
+        "//hybrid:hybrid_tests",
+        "//internal:internal_tests",
+        "//signature:signature_tests",
+        "//subtle:subtle_tests",
     ],
 )
 
-closure_js_library(
-    name = "binary_reader",
+exports_files(
+    ["tsconfig.json"],
+    visibility = ["//:__subpackages__"],
+)
+
+ng_package(
+    name = "tink-crypto",
     srcs = [
-        "binary_keyset_reader.js",
+        "package.json",
+        "@tink_base//:README.md",
     ],
-    deps = [
-        ":readers_writers",
-        "//javascript/exception",
-        "//proto:tink_closure_proto",
-        "@io_bazel_rules_closure//closure/library",
-    ],
+    entry_point = ":index.ts",
+    deps = [":javascript"],
 )
-
-closure_js_library(
-    name = "readers_writers",
-    srcs = [
-        "keyset_reader.js",
-        "keyset_writer.js",
-    ],
-    deps = [
-        "//proto:tink_closure_proto",
-        "@io_bazel_rules_closure//closure/library",
-    ],
-)
-
-closure_js_library(
-    name = "keyset_handle",
-    srcs = [
-        "keyset_handle.js",
-    ],
-    deps = [
-        ":key_manager",
-        ":primitive_set",
-        ":primitives",
-        ":readers_writers",
-        ":registry",
-        ":util",
-        "//javascript/exception",
-        "//proto:tink_closure_proto",
-        "@io_bazel_rules_closure//closure/library",
-    ],
-)
-
-closure_js_library(
-    name = "cleartext_keyset_handle",
-    srcs = [
-        "cleartext_keyset_handle.js",
-    ],
-    deps = [
-        ":keyset_handle",
-        "//proto:tink_closure_proto",
-        "@io_bazel_rules_closure//closure/library",
-    ],
-)
-
-closure_js_library(
-    name = "primitive_set",
-    srcs = [
-        "primitive_set.js",
-    ],
-    deps = [
-        ":crypto_format",
-        "//javascript/exception",
-        "//proto:tink_closure_proto",
-        "@io_bazel_rules_closure//closure/library",
-    ],
-)
-
-closure_js_library(
-    name = "key_manager",
-    srcs = [
-        "key_manager.js",
-    ],
-    deps = [
-        "//javascript/exception",
-        "//proto:tink_closure_proto",
-        "@io_bazel_rules_closure//closure/library",
-        "@io_bazel_rules_closure//closure/protobuf:jspb",
-    ],
-)
-
-closure_js_library(
-    name = "primitive_wrapper",
-    srcs = [
-        "primitive_wrapper.js",
-    ],
-    deps = [
-        ":primitive_set",
-        "@io_bazel_rules_closure//closure/library",
-    ],
-)
-
-closure_js_library(
-    name = "registry",
-    srcs = [
-        "registry.js",
-    ],
-    deps = [
-        ":key_manager",
-        ":primitive_set",
-        ":primitive_wrapper",
-        ":util",
-        "//javascript/exception",
-        "//proto:tink_closure_proto",
-        "@io_bazel_rules_closure//closure/library",
-        "@io_bazel_rules_closure//closure/protobuf:jspb",
-    ],
-)
-
-closure_js_library(
-    name = "crypto_format",
-    srcs = [
-        "crypto_format.js",
-    ],
-    deps = [
-        "//javascript/exception",
-        "//proto:tink_closure_proto",
-        "@io_bazel_rules_closure//closure/library",
-    ],
-)
-
-closure_js_library(
-    name = "util",
-    srcs = [
-        "util.js",
-    ],
-    deps = [
-        "//javascript/exception",
-        "//javascript/subtle",
-        "//proto:common_closure_proto",
-        "//proto:tink_closure_proto",
-        "@io_bazel_rules_closure//closure/library",
-    ],
-)
-
-# test

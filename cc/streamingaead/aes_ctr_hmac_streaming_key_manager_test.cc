@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -28,11 +30,12 @@
 #include "tink/subtle/test_util.h"
 #include "tink/util/istream_input_stream.h"
 #include "tink/util/ostream_output_stream.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
 #include "tink/util/test_matchers.h"
-#include "proto/aes_eax.pb.h"
 #include "proto/aes_ctr_hmac_streaming.pb.h"
+#include "proto/aes_eax.pb.h"
 #include "proto/common.pb.h"
 #include "proto/tink.pb.h"
 
@@ -47,6 +50,7 @@ using ::google::crypto::tink::HashType;
 using ::google::crypto::tink::KeyData;
 using ::testing::Eq;
 using ::testing::HasSubstr;
+using ::testing::Not;
 
 namespace {
 
@@ -113,7 +117,7 @@ TEST(AesCtrHmacStreamingKeyManagerTest, GetPrimitive) {
   ASSERT_THAT(streaming_aead_from_manager_result.status(), IsOk());
 
   subtle::AesCtrHmacStreaming::Params params;
-  params.ikm = "16 bytes of key ";
+  params.ikm = util::SecretDataFromStringView("16 bytes of key ");
   params.hkdf_algo = subtle::HashType::SHA256;;
   params.key_size = 16;
   params.ciphertext_segment_size = 1024;
@@ -130,7 +134,7 @@ TEST(AesCtrHmacStreamingKeyManagerTest, GetPrimitive) {
       EncryptThenDecrypt(streaming_aead_from_manager_result.ValueOrDie().get(),
                          streaming_aead_direct_result.ValueOrDie().get(),
                          subtle::Random::GetRandomBytes(10000),
-                         "some associated data"),
+                         "some associated data", params.ciphertext_offset),
       IsOk());
 }
 
@@ -245,6 +249,64 @@ TEST(AesCtrHmacStreamingKeyManagerTest, CreateKey) {
               Eq(key_format.params().hmac_params().hash()));
   EXPECT_THAT(key_or.ValueOrDie().params().hmac_params().tag_size(),
               Eq(key_format.params().hmac_params().tag_size()));
+}
+
+TEST(AesCtrHmacStreamingKeyManagerTest, DeriveKey) {
+  AesCtrHmacStreamingKeyFormat key_format;
+  key_format.set_version(0);
+  key_format.set_key_size(32);
+  key_format.mutable_params()->set_derived_key_size(32);
+  key_format.mutable_params()->set_hkdf_hash_type(HashType::SHA256);
+  key_format.mutable_params()->set_ciphertext_segment_size(1024);
+
+  util::IstreamInputStream input_stream{
+      absl::make_unique<std::stringstream>("01234567890123456789012345678901")};
+
+  util::StatusOr<AesCtrHmacStreamingKey> key_or =
+      AesCtrHmacStreamingKeyManager().DeriveKey(key_format, &input_stream);
+  ASSERT_THAT(key_or.status(), IsOk());
+  EXPECT_THAT(key_or.ValueOrDie().key_value(),
+              Eq("01234567890123456789012345678901"));
+  EXPECT_THAT(key_or.ValueOrDie().params().derived_key_size(),
+              Eq(key_format.params().derived_key_size()));
+  EXPECT_THAT(key_or.ValueOrDie().params().hkdf_hash_type(),
+              Eq(key_format.params().hkdf_hash_type()));
+  EXPECT_THAT(key_or.ValueOrDie().params().ciphertext_segment_size(),
+              Eq(key_format.params().ciphertext_segment_size()));
+}
+
+TEST(AesCtrHmacStreamingKeyManagerTest, DeriveKeyNotEnoughRandomness) {
+  AesCtrHmacStreamingKeyFormat key_format;
+  key_format.set_version(0);
+  key_format.set_key_size(32);
+  key_format.mutable_params()->set_derived_key_size(32);
+  key_format.mutable_params()->set_hkdf_hash_type(HashType::SHA256);
+  key_format.mutable_params()->set_ciphertext_segment_size(1024);
+
+  util::IstreamInputStream input_stream{
+      absl::make_unique<std::stringstream>("0123456789012345678901234567890")};
+
+  ASSERT_THAT(AesCtrHmacStreamingKeyManager()
+                  .DeriveKey(key_format, &input_stream)
+                  .status(),
+              Not(IsOk()));
+}
+
+TEST(AesCtrHmacStreamingKeyManagerTest, DeriveKeyWrongVersion) {
+  AesCtrHmacStreamingKeyFormat key_format;
+  key_format.set_version(1);
+  key_format.set_key_size(32);
+  key_format.mutable_params()->set_derived_key_size(32);
+  key_format.mutable_params()->set_hkdf_hash_type(HashType::SHA256);
+  key_format.mutable_params()->set_ciphertext_segment_size(1024);
+
+  util::IstreamInputStream input_stream{
+      absl::make_unique<std::stringstream>("0123456789abcdef")};
+
+  ASSERT_THAT(AesCtrHmacStreamingKeyManager()
+                  .DeriveKey(key_format, &input_stream)
+                  .status(),
+              StatusIs(util::error::INVALID_ARGUMENT, HasSubstr("version")));
 }
 
 }  // namespace

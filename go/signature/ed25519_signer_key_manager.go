@@ -1,3 +1,5 @@
+// Copyright 2018 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -23,10 +25,9 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/google/tink/go/keyset"
-	"github.com/google/tink/go/core/registry"
-	subtleSignature "github.com/google/tink/go/subtle/signature"
-	ed25519pb "github.com/google/tink/proto/ed25519_go_proto"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	"github.com/google/tink/go/signature/subtle"
+	ed25519pb "github.com/google/tink/go/proto/ed25519_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 const (
@@ -41,9 +42,6 @@ var errInvalidED25519SignKeyFormat = errors.New("ed25519_signer_key_manager: inv
 // ed25519SignerKeyManager is an implementation of KeyManager interface.
 // It generates new ED25519PrivateKeys and produces new instances of ED25519Sign subtle.
 type ed25519SignerKeyManager struct{}
-
-// Assert that ed25519SignerKeyManager implements the PrivateKeyManager interface.
-var _ registry.PrivateKeyManager = (*ed25519SignerKeyManager)(nil)
 
 // newED25519SignerKeyManager creates a new ed25519SignerKeyManager.
 func newED25519SignerKeyManager() *ed25519SignerKeyManager {
@@ -64,7 +62,7 @@ func (km *ed25519SignerKeyManager) Primitive(serializedKey []byte) (interface{},
 		return nil, err
 	}
 
-	ret, err := subtleSignature.NewED25519Signer(key.KeyValue)
+	ret, err := subtle.NewED25519Signer(key.KeyValue)
 	if err != nil {
 		return nil, fmt.Errorf("ed25519_signer_key_manager: %s", err)
 	}

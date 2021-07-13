@@ -29,6 +29,7 @@ enum EllipticCurveType {
   NIST_P256 = 2,
   NIST_P384 = 3,
   NIST_P521 = 4,
+  CURVE25519 = 5,
 };
 
 enum EcPointFormat {
@@ -46,6 +47,7 @@ enum HashType {
   SHA384 = 2,
   SHA256 = 3,
   SHA512 = 4,
+  SHA224 = 5,
 };
 
 enum EcdsaSignatureEncoding {

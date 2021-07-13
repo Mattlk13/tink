@@ -17,8 +17,10 @@
 #ifndef TINK_SUBTLE_RANDOM_H_
 #define TINK_SUBTLE_RANDOM_H_
 
-#include <string>
 #include <memory>
+#include <string>
+
+#include "tink/util/secret_data.h"
 
 namespace crypto {
 namespace tink {
@@ -26,8 +28,13 @@ namespace subtle {
 
 class Random {
  public:
-  // Returns a random std::string of desired length.
+  // Returns a random string of desired length.
   static std::string GetRandomBytes(size_t length);
+  static uint32_t GetRandomUInt32();
+  static uint16_t GetRandomUInt16();
+  static uint8_t GetRandomUInt8();
+  // Returns length bytes of random data stored in specialized key container.
+  static util::SecretData GetRandomKeyBytes(size_t length);
 };
 
 }  // namespace subtle

@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -13,6 +15,18 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 package testutil
+
+import (
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+)
+
+const (
+	wycheproofDir = "wycheproof/testvectors"
+)
 
 // WycheproofSuite represents the common elements of the top level
 // object in a Wycheproof json file. Implementations should embed
@@ -42,4 +56,40 @@ type WycheproofCase struct {
 	Comment string   `json:"comment"`
 	Result  string   `json:"result"`
 	Flags   []string `json:"flags"`
+}
+
+// HexBytes is a helper type for unmarshalling a byte sequence represented as a
+// hex encoded string.
+type HexBytes []byte
+
+// UnmarshalText converts a hex encoded string into a sequence of bytes.
+func (a *HexBytes) UnmarshalText(text []byte) error {
+	decoded, err := hex.DecodeString(string(text))
+	if err != nil {
+		return err
+	}
+
+	*a = decoded
+	return nil
+}
+
+// PopulateSuite opens filename from the Wycheproof test vectors directory and
+// populates suite with the decoded JSON data.
+//
+// When using this in a test function, the function should start with
+// SkipTestIfTestSrcDirIsNotSet(), to expediently skip the test.
+func PopulateSuite(suite interface{}, filename string) error {
+	srcDir, ok := os.LookupEnv("TEST_SRCDIR")
+	if !ok {
+		return errors.New("TEST_SRCDIR not found")
+	}
+	f, err := os.Open(filepath.Join(srcDir, wycheproofDir, filename))
+	if err != nil {
+		return err
+	}
+	parser := json.NewDecoder(f)
+	if err := parser.Decode(suite); err != nil {
+		return err
+	}
+	return nil
 }

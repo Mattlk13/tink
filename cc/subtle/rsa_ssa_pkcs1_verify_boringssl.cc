@@ -33,6 +33,9 @@ util::StatusOr<std::unique_ptr<RsaSsaPkcs1VerifyBoringSsl>>
 RsaSsaPkcs1VerifyBoringSsl::New(
     const SubtleUtilBoringSSL::RsaPublicKey& pub_key,
     const SubtleUtilBoringSSL::RsaSsaPkcs1Params& params) {
+  auto status = internal::CheckFipsCompatibility<RsaSsaPkcs1VerifyBoringSsl>();
+  if (!status.ok()) return status;
+
   // Check hash.
   auto hash_status =
       SubtleUtilBoringSSL::ValidateSignatureHash(params.hash_type);
@@ -42,35 +45,18 @@ RsaSsaPkcs1VerifyBoringSsl::New(
   auto sig_hash_result = SubtleUtilBoringSSL::EvpHash(params.hash_type);
   if (!sig_hash_result.ok()) return sig_hash_result.status();
 
-  // Check RSA's modulus.
-  auto status_or_n = SubtleUtilBoringSSL::str2bn(pub_key.n);
-  if (!status_or_n.ok()) return status_or_n.status();
-  auto status_or_e = SubtleUtilBoringSSL::str2bn(pub_key.e);
-  if (!status_or_e.ok()) return status_or_e.status();
-  auto modulus_status = SubtleUtilBoringSSL::ValidateRsaModulusSize(
-      BN_num_bits(status_or_n.ValueOrDie().get()));
-  if (!modulus_status.ok()) return modulus_status;
-  bssl::UniquePtr<RSA> rsa(RSA_new());
-  if (rsa.get() == nullptr) {
-    return util::Status(util::error::INTERNAL,
-                        "BoringSsl RSA allocation error");
+  // The RSA modulus and exponent are checked as part of the conversion to
+  // bssl::UniquePtr<RSA>.
+  auto rsa = SubtleUtilBoringSSL::BoringSslRsaFromRsaPublicKey(pub_key);
+  if (!rsa.ok()) {
+    return rsa.status();
   }
-  // Set RSA public key and hence d is nullptr.
-  if (1 != RSA_set0_key(rsa.get(), status_or_n.ValueOrDie().get(),
-                        status_or_e.ValueOrDie().get(), nullptr /* d */)) {
-    return util::Status(util::error::INTERNAL, "Could not set RSA key.");
-  }
-  status_or_n.ValueOrDie().release();
-  status_or_e.ValueOrDie().release();
+
   std::unique_ptr<RsaSsaPkcs1VerifyBoringSsl> verify(
-      new RsaSsaPkcs1VerifyBoringSsl(std::move(rsa),
+      new RsaSsaPkcs1VerifyBoringSsl(std::move(rsa).ValueOrDie(),
                                      sig_hash_result.ValueOrDie()));
   return std::move(verify);
 }
-
-RsaSsaPkcs1VerifyBoringSsl::RsaSsaPkcs1VerifyBoringSsl(bssl::UniquePtr<RSA> rsa,
-                                                       const EVP_MD* sig_hash)
-    : rsa_(std::move(rsa)), sig_hash_(sig_hash) {}
 
 util::Status RsaSsaPkcs1VerifyBoringSsl::Verify(absl::string_view signature,
                                                 absl::string_view data) const {

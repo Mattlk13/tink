@@ -24,6 +24,7 @@
 #include "tink/subtle/random.h"
 #include "tink/util/enums.h"
 #include "tink/util/errors.h"
+#include "tink/util/input_stream_util.h"
 #include "tink/util/protobuf_helper.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
@@ -60,6 +61,30 @@ StatusOr<HmacKey> HmacKeyManager::CreateKey(
   return hmac_key;
 }
 
+StatusOr<HmacKey> HmacKeyManager::DeriveKey(
+    const HmacKeyFormat& hmac_key_format, InputStream* input_stream) const {
+  crypto::tink::util::Status status =
+      ValidateVersion(hmac_key_format.version(), get_version());
+  if (!status.ok()) return status;
+
+  crypto::tink::util::StatusOr<std::string> randomness =
+      ReadBytesFromStream(hmac_key_format.key_size(), input_stream);
+  if (!randomness.ok()) {
+    if (randomness.status().error_code() == util::error::OUT_OF_RANGE) {
+      return crypto::tink::util::Status(
+          crypto::tink::util::error::INVALID_ARGUMENT,
+          "Could not get enough pseudorandomness from input stream");
+    }
+    return randomness.status();
+  }
+
+  HmacKey hmac_key;
+  hmac_key.set_version(get_version());
+  *(hmac_key.mutable_params()) = hmac_key_format.params();
+  hmac_key.set_key_value(randomness.ValueOrDie());
+  return hmac_key;
+}
+
 Status HmacKeyManager::ValidateParams(const HmacParams& params) const {
   if (params.tag_size() < kMinTagSizeInBytes) {
     return ToStatusF(util::error::INVALID_ARGUMENT,
@@ -67,7 +92,9 @@ Status HmacKeyManager::ValidateParams(const HmacParams& params) const {
                      params.tag_size());
   }
   std::map<HashType, uint32_t> max_tag_size = {{HashType::SHA1, 20},
+                                               {HashType::SHA224, 28},
                                                {HashType::SHA256, 32},
+                                               {HashType::SHA384, 48},
                                                {HashType::SHA512, 64}};
   if (max_tag_size.find(params.hash()) == max_tag_size.end()) {
     return ToStatusF(util::error::INVALID_ARGUMENT,
@@ -87,8 +114,8 @@ Status HmacKeyManager::ValidateKey(const HmacKey& key) const {
   Status status = ValidateVersion(key.version(), get_version());
   if (!status.ok()) return status;
   if (key.key_value().size() < kMinKeySizeInBytes) {
-      return ToStatusF(util::error::INVALID_ARGUMENT,
-                       "Invalid HmacKey: key_value is too short.");
+    return util::Status(util::error::INVALID_ARGUMENT,
+                        "Invalid HmacKey: key_value is too short.");
   }
   return ValidateParams(key.params());
 }
@@ -97,8 +124,8 @@ Status HmacKeyManager::ValidateKey(const HmacKey& key) const {
 Status HmacKeyManager::ValidateKeyFormat(
     const HmacKeyFormat& key_format) const {
   if (key_format.key_size() < kMinKeySizeInBytes) {
-      return ToStatusF(util::error::INVALID_ARGUMENT,
-                       "Invalid HmacKeyFormat: key_size is too small.");
+    return util::Status(util::error::INVALID_ARGUMENT,
+                        "Invalid HmacKeyFormat: key_size is too small.");
   }
   return ValidateParams(key_format.params());
 }

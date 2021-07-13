@@ -1,0 +1,8 @@
+licenses(["notice"])
+
+package(default_visibility = ["//visibility:public"])
+
+java_library(
+    name = "alpha",
+    srcs = ["Alpha.java"],
+)

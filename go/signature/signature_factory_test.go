@@ -1,3 +1,5 @@
+// Copyright 2018 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -18,12 +20,14 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/google/tink/go/keyset"
+	"github.com/google/tink/go/mac"
 	"github.com/google/tink/go/signature"
 	"github.com/google/tink/go/subtle/random"
 	"github.com/google/tink/go/testkeyset"
 	"github.com/google/tink/go/testutil"
-	commonpb "github.com/google/tink/proto/common_go_proto"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	commonpb "github.com/google/tink/go/proto/common_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 func TestSignerVerifyFactory(t *testing.T) {
@@ -102,4 +106,43 @@ func newECDSAKeysetKeypair(hashType commonpb.HashType,
 		tinkpb.KeyData_ASYMMETRIC_PUBLIC)
 	pubKey := testutil.NewKey(keyData, tinkpb.KeyStatusType_ENABLED, keyID, outputPrefixType)
 	return privKey, pubKey
+}
+
+func TestFactoryWithInvalidPrimitiveSetType(t *testing.T) {
+	wrongKH, err := keyset.NewHandle(mac.HMACSHA256Tag128KeyTemplate())
+	if err != nil {
+		t.Fatalf("failed to build *keyset.Handle: %s", err)
+	}
+
+	_, err = signature.NewSigner(wrongKH)
+	if err == nil {
+		t.Error("calling NewSigner() with wrong *keyset.Handle should fail")
+	}
+
+	_, err = signature.NewVerifier(wrongKH)
+	if err == nil {
+		t.Error("calling NewVerifier() with wrong *keyset.Handle should fail")
+	}
+}
+
+func TestFactoryWithValidPrimitiveSetType(t *testing.T) {
+	goodKH, err := keyset.NewHandle(signature.ECDSAP256KeyTemplate())
+	if err != nil {
+		t.Fatalf("failed to build *keyset.Handle: %s", err)
+	}
+
+	_, err = signature.NewSigner(goodKH)
+	if err != nil {
+		t.Errorf("calling NewSigner() with good *keyset.Handle failed: %s", err)
+	}
+
+	goodPublicKH, err := goodKH.Public()
+	if err != nil {
+		t.Errorf("failed to get public key: %s", err)
+	}
+
+	_, err = signature.NewVerifier(goodPublicKH)
+	if err != nil {
+		t.Errorf("calling NewVerifier() with good *keyset.Handle failed: %s", err)
+	}
 }

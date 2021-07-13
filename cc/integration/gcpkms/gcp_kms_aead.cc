@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -59,8 +61,7 @@ GcpKmsAead::New(absl::string_view key_name,
 }
 
 StatusOr<std::string> GcpKmsAead::Encrypt(
-    absl::string_view plaintext,
-    absl::string_view associated_data) const {
+    absl::string_view plaintext, absl::string_view associated_data) const {
   EncryptRequest req;
   req.set_name(key_name_);
   req.set_plaintext(std::string(plaintext));
@@ -68,17 +69,18 @@ StatusOr<std::string> GcpKmsAead::Encrypt(
 
   EncryptResponse resp;
   ClientContext context;
+  context.AddMetadata("x-goog-request-params",
+                      absl::StrCat("name=", key_name_));
+
   auto status =  kms_stub_->Encrypt(&context, req, &resp);
 
   if (status.ok()) return resp.ciphertext();
   return ToStatusF(util::error::INVALID_ARGUMENT,
-                   "GCP KMS encryption failed: %s",
-                   status.error_message().c_str());
+                   "GCP KMS encryption failed: %s", status.error_message());
 }
 
 StatusOr<std::string> GcpKmsAead::Decrypt(
-    absl::string_view ciphertext,
-    absl::string_view associated_data) const {
+    absl::string_view ciphertext, absl::string_view associated_data) const {
   DecryptRequest req;
   req.set_name(key_name_);
   req.set_ciphertext(std::string(ciphertext));
@@ -86,12 +88,14 @@ StatusOr<std::string> GcpKmsAead::Decrypt(
 
   DecryptResponse resp;
   ClientContext context;
+  context.AddMetadata("x-goog-request-params",
+                      absl::StrCat("name=", key_name_));
+
   auto status =  kms_stub_->Decrypt(&context, req, &resp);
 
   if (status.ok()) return resp.plaintext();
   return ToStatusF(util::error::INVALID_ARGUMENT,
-                   "GCP KMS encryption failed: %s",
-                   status.error_message().c_str());
+                   "GCP KMS encryption failed: %s", status.error_message());
 }
 
 }  // namespace gcpkms

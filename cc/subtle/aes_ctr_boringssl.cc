@@ -17,50 +17,33 @@
 #include "tink/subtle/aes_ctr_boringssl.h"
 
 #include <string>
-#include <vector>
 
-#include "openssl/err.h"
+#include "absl/memory/memory.h"
 #include "openssl/evp.h"
-#include "tink/subtle/ind_cpa_cipher.h"
 #include "tink/subtle/random.h"
 #include "tink/subtle/subtle_util.h"
 #include "tink/subtle/subtle_util_boringssl.h"
-#include "tink/util/errors.h"
 #include "tink/util/status.h"
-#include "tink/util/statusor.h"
-
 
 namespace crypto {
 namespace tink {
 namespace subtle {
 
-static const EVP_CIPHER* GetCipherForKeySize(uint32_t size_in_bytes) {
-  switch (size_in_bytes) {
-    case 16:
-      return EVP_aes_128_ctr();
-    case 32:
-      return EVP_aes_256_ctr();
-    default:
-      return nullptr;
-  }
-}
-
-AesCtrBoringSsl::AesCtrBoringSsl(absl::string_view key_value,
-                                 uint8_t iv_size, const EVP_CIPHER* cipher)
-    : key_(key_value), iv_size_(iv_size), cipher_(cipher) {}
-
 util::StatusOr<std::unique_ptr<IndCpaCipher>> AesCtrBoringSsl::New(
-    absl::string_view key_value, uint8_t iv_size) {
-  const EVP_CIPHER* cipher = GetCipherForKeySize(key_value.size());
+    util::SecretData key, int iv_size) {
+  auto status = internal::CheckFipsCompatibility<AesCtrBoringSsl>();
+  if (!status.ok()) return status;
+
+  const EVP_CIPHER* cipher =
+      SubtleUtilBoringSSL::GetAesCtrCipherForKeySize(key.size());
   if (cipher == nullptr) {
-    return util::Status(util::error::INTERNAL, "invalid key size");
+    return util::Status(util::error::INVALID_ARGUMENT, "invalid key size");
   }
-  if (iv_size < MIN_IV_SIZE_IN_BYTES || iv_size > BLOCK_SIZE) {
-    return util::Status(util::error::INTERNAL, "invalid iv size");
+  if (iv_size < kMinIvSizeInBytes || iv_size > kBlockSize) {
+    return util::Status(util::error::INVALID_ARGUMENT, "invalid iv size");
   }
-  std::unique_ptr<IndCpaCipher> ind_cpa_cipher(
-      new AesCtrBoringSsl(key_value, iv_size, cipher));
-  return std::move(ind_cpa_cipher);
+  return {
+      absl::WrapUnique(new AesCtrBoringSsl(std::move(key), iv_size, cipher))};
 }
 
 util::StatusOr<std::string> AesCtrBoringSsl::Encrypt(
@@ -77,14 +60,14 @@ util::StatusOr<std::string> AesCtrBoringSsl::Encrypt(
   std::string ciphertext = Random::GetRandomBytes(iv_size_);
   // OpenSSL expects that the IV must be a full block. We pad with zeros.
   std::string iv_block = ciphertext;
-  // Note that BLOCK_SIZE >= iv_size_ is checked in the factory method.
+  // Note that kBlockSize >= iv_size_ is checked in the factory method.
   // We explicitly add the '\0' argument to stress that we need to initialize
   // the new memory.
-  iv_block.resize(BLOCK_SIZE, '\0');
+  iv_block.resize(kBlockSize, '\0');
 
-  int ret = EVP_EncryptInit_ex(ctx.get(), cipher_, nullptr /* engine */,
-                               reinterpret_cast<const uint8_t*>(key_.data()),
-                               reinterpret_cast<const uint8_t*>(&iv_block[0]));
+  int ret =
+      EVP_EncryptInit_ex(ctx.get(), cipher_, nullptr /* engine */, key_.data(),
+                         reinterpret_cast<const uint8_t*>(&iv_block[0]));
   if (ret != 1) {
     return util::Status(util::error::INTERNAL, "could not initialize ctx");
   }
@@ -105,7 +88,7 @@ util::StatusOr<std::string> AesCtrBoringSsl::Encrypt(
 util::StatusOr<std::string> AesCtrBoringSsl::Decrypt(
     absl::string_view ciphertext) const {
   if (ciphertext.size() < iv_size_) {
-    return util::Status(util::error::INTERNAL, "ciphertext too short");
+    return util::Status(util::error::INVALID_ARGUMENT, "ciphertext too short");
   }
 
   bssl::UniquePtr<EVP_CIPHER_CTX> ctx(EVP_CIPHER_CTX_new());
@@ -116,7 +99,7 @@ util::StatusOr<std::string> AesCtrBoringSsl::Decrypt(
 
   // Initialise key and IV
   std::string iv_block = std::string(ciphertext.substr(0, iv_size_));
-  iv_block.resize(BLOCK_SIZE, '\0');
+  iv_block.resize(kBlockSize, '\0');
   int ret = EVP_DecryptInit_ex(ctx.get(), cipher_, nullptr /* engine */,
                                reinterpret_cast<const uint8_t*>(key_.data()),
                                reinterpret_cast<const uint8_t*>(&iv_block[0]));

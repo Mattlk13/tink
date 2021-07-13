@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -15,15 +17,18 @@
 #ifndef TINK_SUBTLE_AES_CTR_HMAC_STREAMING_H_
 #define TINK_SUBTLE_AES_CTR_HMAC_STREAMING_H_
 
+#include <utility>
 #include <vector>
 
 #include "absl/strings/string_view.h"
 #include "openssl/evp.h"
 #include "tink/mac.h"
+#include "tink/internal/fips_utils.h"
 #include "tink/subtle/common_enums.h"
 #include "tink/subtle/nonce_based_streaming_aead.h"
 #include "tink/subtle/stream_segment_decrypter.h"
 #include "tink/subtle/stream_segment_encrypter.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
 
@@ -57,7 +62,7 @@ namespace subtle {
 class AesCtrHmacStreaming : public NonceBasedStreamingAead {
  public:
   struct Params {
-    std::string ikm;
+    util::SecretData ikm;
     HashType hkdf_algo;
     int key_size;
     int ciphertext_segment_size;
@@ -67,7 +72,7 @@ class AesCtrHmacStreaming : public NonceBasedStreamingAead {
   };
 
   // The size of the nonce for AES-CTR.
-  static const int kNonceSizeInBytes = 16;
+  static constexpr int kNonceSizeInBytes = 16;
 
   // The nonce has the format nonce_prefix || ctr || last_block || 0 0 0 0,
   // where:
@@ -76,14 +81,15 @@ class AesCtrHmacStreaming : public NonceBasedStreamingAead {
   //  - ctr is a big endian 32 bit counter
   //  - last_block is a byte equal to 1 for the last block of the file
   //    and 0 otherwise.
-  static const int kNoncePrefixSizeInBytes = 7;
+  static constexpr int kNoncePrefixSizeInBytes = 7;
 
-  static const int kHmacKeySizeInBytes = 32;
+  static constexpr int kHmacKeySizeInBytes = 32;
 
   static util::StatusOr<std::unique_ptr<AesCtrHmacStreaming>> New(
-      const Params& params);
+      Params params);
 
-  ~AesCtrHmacStreaming() override {}
+  static constexpr crypto::tink::internal::FipsCompatibility kFipsStatus =
+      crypto::tink::internal::FipsCompatibility::kNotFips;
 
  protected:
   util::StatusOr<std::unique_ptr<StreamSegmentEncrypter>> NewSegmentEncrypter(
@@ -93,7 +99,7 @@ class AesCtrHmacStreaming : public NonceBasedStreamingAead {
       absl::string_view associated_data) const override;
 
  private:
-  explicit AesCtrHmacStreaming(const Params& params) : params_(params) {}
+  explicit AesCtrHmacStreaming(Params params) : params_(std::move(params)) {}
   const Params params_;
 };
 
@@ -118,20 +124,19 @@ class AesCtrHmacStreamSegmentEncrypter : public StreamSegmentEncrypter {
     return ciphertext_segment_size_;
   }
   int get_ciphertext_offset() const override { return ciphertext_offset_; }
-  ~AesCtrHmacStreamSegmentEncrypter() override {}
 
  protected:
   void IncSegmentNumber() override { segment_number_++; }
 
  private:
-  AesCtrHmacStreamSegmentEncrypter(absl::string_view key_value,
+  AesCtrHmacStreamSegmentEncrypter(util::SecretData key_value,
                                    absl::string_view header,
                                    absl::string_view nonce_prefix,
                                    int ciphertext_segment_size,
                                    int ciphertext_offset, int tag_size,
                                    const EVP_CIPHER* cipher,
                                    std::unique_ptr<Mac> mac)
-      : key_value_(key_value),
+      : key_value_(std::move(key_value)),
         header_(header.begin(), header.end()),
         nonce_prefix_(nonce_prefix),
         ciphertext_segment_size_(ciphertext_segment_size),
@@ -141,7 +146,7 @@ class AesCtrHmacStreamSegmentEncrypter : public StreamSegmentEncrypter {
         mac_(std::move(mac)),
         segment_number_(0) {}
 
-  const std::string key_value_;
+  const util::SecretData key_value_;
   const std::vector<uint8_t> header_;
   const std::string nonce_prefix_;
   const int ciphertext_segment_size_;
@@ -179,24 +184,23 @@ class AesCtrHmacStreamSegmentDecrypter : public StreamSegmentDecrypter {
   ~AesCtrHmacStreamSegmentDecrypter() override {}
 
  private:
-  AesCtrHmacStreamSegmentDecrypter(absl::string_view ikm, HashType hkdf_algo,
+  AesCtrHmacStreamSegmentDecrypter(util::SecretData ikm, HashType hkdf_algo,
                                    int key_size,
                                    absl::string_view associated_data,
                                    int ciphertext_segment_size,
                                    int ciphertext_offset, HashType tag_algo,
                                    int tag_size)
-      : ikm_(ikm),
+      : ikm_(std::move(ikm)),
         hkdf_algo_(hkdf_algo),
         key_size_(key_size),
         associated_data_(associated_data),
         ciphertext_segment_size_(ciphertext_segment_size),
         ciphertext_offset_(ciphertext_offset),
         tag_algo_(tag_algo),
-        tag_size_(tag_size),
-        is_initialized_(false) {}
+        tag_size_(tag_size) {}
 
   // Parameters set upon decrypter creation.
-  const std::string ikm_;
+  const util::SecretData ikm_;
   const HashType hkdf_algo_;
   const int key_size_;
   const std::string associated_data_;
@@ -204,10 +208,10 @@ class AesCtrHmacStreamSegmentDecrypter : public StreamSegmentDecrypter {
   const int ciphertext_offset_;
   const HashType tag_algo_;
   const int tag_size_;
-  bool is_initialized_;
 
   // Parameters set when initializing with data from stream header.
-  std::string key_value_;
+  bool is_initialized_ = false;
+  util::SecretData key_value_;
   std::string nonce_prefix_;
   const EVP_CIPHER* cipher_;
   std::unique_ptr<Mac> mac_;

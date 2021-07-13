@@ -16,17 +16,19 @@
 #ifndef TINK_DAEAD_AES_SIV_KEY_MANAGER_H_
 #define TINK_DAEAD_AES_SIV_KEY_MANAGER_H_
 
-#include <algorithm>
-#include <vector>
+#include <string>
 
-#include "absl/strings/string_view.h"
+#include "absl/memory/memory.h"
+#include "absl/strings/str_cat.h"
 #include "tink/core/key_type_manager.h"
 #include "tink/deterministic_aead.h"
 #include "tink/subtle/aes_siv_boringssl.h"
 #include "tink/subtle/random.h"
 #include "tink/util/constants.h"
 #include "tink/util/errors.h"
+#include "tink/util/input_stream_util.h"
 #include "tink/util/protobuf_helper.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
 #include "tink/util/validation.h"
@@ -43,7 +45,8 @@ class AesSivKeyManager
   class DeterministicAeadFactory : public PrimitiveFactory<DeterministicAead> {
     crypto::tink::util::StatusOr<std::unique_ptr<DeterministicAead>> Create(
         const google::crypto::tink::AesSivKey& key) const override {
-      return subtle::AesSivBoringSsl::New(key.key_value());
+      return subtle::AesSivBoringSsl::New(
+          util::SecretDataFromStringView(key.key_value()));
     }
   };
 
@@ -80,19 +83,44 @@ class AesSivKeyManager
     return key;
   }
 
+  crypto::tink::util::StatusOr<google::crypto::tink::AesSivKey> DeriveKey(
+      const google::crypto::tink::AesSivKeyFormat& key_format,
+      InputStream* input_stream) const override {
+    crypto::tink::util::Status status =
+        ValidateVersion(key_format.version(), get_version());
+    if (!status.ok()) return status;
+
+    crypto::tink::util::StatusOr<std::string> randomness =
+        ReadBytesFromStream(key_format.key_size(), input_stream);
+
+    if (!randomness.ok()) {
+      if (randomness.status().error_code() == util::error::OUT_OF_RANGE) {
+        return crypto::tink::util::Status(
+            crypto::tink::util::error::INVALID_ARGUMENT,
+            "Could not get enough pseudorandomness from input stream");
+      }
+      return randomness.status();
+    }
+    google::crypto::tink::AesSivKey key;
+    key.set_version(get_version());
+    key.set_key_value(randomness.ValueOrDie());
+    return key;
+  }
+
  private:
   crypto::tink::util::Status ValidateKeySize(uint32_t key_size) const {
-    if (key_size != 64) {
+    if (key_size != kKeySizeInBytes) {
       return crypto::tink::util::Status(
           crypto::tink::util::error::INVALID_ARGUMENT,
           absl::StrCat("Invalid key size: key size is ", key_size,
-                       " bytes; supported size: 64 bytes."));
+                       " bytes; supported size: ", kKeySizeInBytes, " bytes."));
     }
     return crypto::tink::util::OkStatus();
   }
 
   const std::string key_type_ = absl::StrCat(
       kTypeGoogleapisCom, google::crypto::tink::AesSivKey().GetTypeName());
+  const int kKeySizeInBytes = 64;
 };
 
 }  // namespace tink

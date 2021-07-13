@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -43,6 +45,10 @@ class GcpKmsClient : public crypto::tink::KmsClient  {
   // If 'credential_path' is empty, then default credentials will be used.
   static crypto::tink::util::StatusOr<std::unique_ptr<GcpKmsClient>>
   New(absl::string_view key_uri, absl::string_view credentials_path);
+
+  // Creates a new client and registers it in KMSClients.
+  static crypto::tink::util::Status RegisterNewClient(
+      absl::string_view key_uri, absl::string_view credentials_path);
 
   // Returns true iff this client does support KMS key specified by 'key_uri'.
   bool DoesSupport(absl::string_view key_uri) const override;

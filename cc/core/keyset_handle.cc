@@ -15,19 +15,23 @@
 ///////////////////////////////////////////////////////////////////////////////
 #include "tink/keyset_handle.h"
 
-#include <random>
+#include <memory>
+
 #include "absl/memory/memory.h"
 #include "tink/aead.h"
+#include "tink/internal/key_info.h"
 #include "tink/keyset_reader.h"
 #include "tink/keyset_writer.h"
 #include "tink/registry.h"
 #include "tink/util/errors.h"
+#include "tink/util/keyset_util.h"
 #include "proto/tink.pb.h"
 
 using google::crypto::tink::EncryptedKeyset;
 using google::crypto::tink::KeyData;
 using google::crypto::tink::Keyset;
 using google::crypto::tink::KeyTemplate;
+using google::crypto::tink::KeysetInfo;
 
 
 namespace crypto {
@@ -58,27 +62,6 @@ Decrypt(const EncryptedKeyset& enc_keyset, const Aead& master_key_aead) {
   return std::move(keyset);
 }
 
-uint32_t NewKeyId() {
-  std::random_device rd;
-  std::minstd_rand0 gen(rd());
-  std::uniform_int_distribution<uint32_t> dist;
-  return dist(gen);
-}
-
-uint32_t GenerateUnusedKeyId(const Keyset& keyset) {
-  while (true) {
-    uint32_t key_id = NewKeyId();
-    bool already_exists = false;
-    for (auto& key : keyset.key()) {
-      if (key.key_id() == key_id) {
-        already_exists = true;
-        break;
-      }
-    }
-    if (!already_exists) return key_id;
-  }
-}
-
 util::Status ValidateNoSecret(const Keyset& keyset) {
   for (const Keyset::Key& key : keyset.key()) {
     if (key.key_data().key_material_type() == KeyData::UNKNOWN_KEYMATERIAL ||
@@ -102,7 +85,7 @@ util::StatusOr<std::unique_ptr<KeysetHandle>> KeysetHandle::Read(
   if (!enc_keyset_result.ok()) {
     return ToStatusF(util::error::INVALID_ARGUMENT,
                      "Error reading encrypted keyset data: %s",
-                     enc_keyset_result.status().error_message().c_str());
+                     enc_keyset_result.status().error_message());
   }
 
   auto keyset_result =
@@ -110,7 +93,7 @@ util::StatusOr<std::unique_ptr<KeysetHandle>> KeysetHandle::Read(
   if (!keyset_result.ok()) {
     return ToStatusF(util::error::INVALID_ARGUMENT,
                      "Error decrypting encrypted keyset: %s",
-                     keyset_result.status().error_message().c_str());
+                     keyset_result.status().error_message());
   }
 
   std::unique_ptr<KeysetHandle> handle(
@@ -132,7 +115,7 @@ util::StatusOr<std::unique_ptr<KeysetHandle>> KeysetHandle::ReadNoSecret(
 }
 
 util::Status KeysetHandle::Write(KeysetWriter* writer,
-                                          const Aead& master_key_aead) {
+                                 const Aead& master_key_aead) const {
   if (writer == nullptr) {
     return util::Status(util::error::INVALID_ARGUMENT,
                         "Writer must be non-null");
@@ -141,12 +124,12 @@ util::Status KeysetHandle::Write(KeysetWriter* writer,
   if (!encrypt_result.ok()) {
     return ToStatusF(util::error::INVALID_ARGUMENT,
                      "Encryption of the keyset failed: %s",
-                     encrypt_result.status().error_message().c_str());
+                     encrypt_result.status().error_message());
   }
   return writer->Write(*(encrypt_result.ValueOrDie().get()));
 }
 
-util::Status KeysetHandle::WriteNoSecret(KeysetWriter* writer) {
+util::Status KeysetHandle::WriteNoSecret(KeysetWriter* writer) const {
   if (writer == nullptr) {
     return util::Status(util::error::INVALID_ARGUMENT,
                         "Writer must be non-null");
@@ -184,7 +167,7 @@ util::StatusOr<std::unique_ptr<Keyset::Key>> ExtractPublicKey(
 }
 
 util::StatusOr<std::unique_ptr<KeysetHandle>>
-KeysetHandle::GetPublicKeysetHandle() {
+KeysetHandle::GetPublicKeysetHandle() const {
   std::unique_ptr<Keyset> public_keyset(new Keyset());
   for (const Keyset::Key& key : get_keyset().key()) {
     auto public_key_result = ExtractPublicKey(key);
@@ -200,6 +183,11 @@ KeysetHandle::GetPublicKeysetHandle() {
 crypto::tink::util::StatusOr<uint32_t> KeysetHandle::AddToKeyset(
     const google::crypto::tink::KeyTemplate& key_template,
     bool as_primary, Keyset* keyset) {
+  if (key_template.output_prefix_type() ==
+      google::crypto::tink::OutputPrefixType::UNKNOWN_PREFIX) {
+    return util::Status(util::error::INVALID_ARGUMENT,
+                        "key template has unknown prefix");
+  }
   auto key_data_result = Registry::NewKeyData(key_template);
   if (!key_data_result.ok()) return key_data_result.status();
   auto key_data = std::move(key_data_result.ValueOrDie());
@@ -213,6 +201,10 @@ crypto::tink::util::StatusOr<uint32_t> KeysetHandle::AddToKeyset(
     keyset->set_primary_key_id(key_id);
   }
   return key_id;
+}
+
+KeysetInfo KeysetHandle::GetKeysetInfo() const {
+  return KeysetInfoFromKeyset(get_keyset());
 }
 
 KeysetHandle::KeysetHandle(Keyset keyset)

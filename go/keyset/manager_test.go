@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -22,7 +24,7 @@ import (
 
 	"github.com/google/tink/go/mac"
 	"github.com/google/tink/go/testutil"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 func TestKeysetManagerBasic(t *testing.T) {
@@ -80,5 +82,15 @@ func TestExistingKeyset(t *testing.T) {
 	}
 	if ks2.Key[1].KeyId != ks2.PrimaryKeyId {
 		t.Errorf("expect the second key to be primary")
+	}
+}
+
+func TestUnknowOutputPrefixTypeFails(t *testing.T) {
+	ksm1 := keyset.NewManager()
+	kt := mac.HMACSHA256Tag128KeyTemplate()
+	kt.OutputPrefixType = tinkpb.OutputPrefixType_UNKNOWN_PREFIX
+	err := ksm1.Rotate(kt)
+	if err == nil {
+		t.Errorf("ksm1.Rotate(kt) where kt has an unknown prefix succeeded, want error")
 	}
 }

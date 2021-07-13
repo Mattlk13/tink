@@ -18,11 +18,11 @@
 #define TINK_SUBTLE_AES_CMAC_BORINGSSL_H_
 
 #include <memory>
+#include <utility>
 
-#include "absl/strings/string_view.h"
 #include "tink/mac.h"
-#include "tink/subtle/common_enums.h"
-#include "tink/util/status.h"
+#include "tink/internal/fips_utils.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/statusor.h"
 
 namespace crypto {
@@ -32,7 +32,7 @@ namespace subtle {
 class AesCmacBoringSsl : public Mac {
  public:
   static crypto::tink::util::StatusOr<std::unique_ptr<Mac>> New(
-      const std::string& key_value, uint32_t tag_size);
+      util::SecretData key, uint32_t tag_size);
 
   // Computes and returns the CMAC for 'data'.
   crypto::tink::util::StatusOr<std::string> ComputeMac(
@@ -43,7 +43,8 @@ class AesCmacBoringSsl : public Mac {
   crypto::tink::util::Status VerifyMac(absl::string_view mac,
                                        absl::string_view data) const override;
 
-  ~AesCmacBoringSsl() override {}
+  static constexpr crypto::tink::internal::FipsCompatibility kFipsStatus =
+      crypto::tink::internal::FipsCompatibility::kNotFips;
 
  private:
   // CMAC key sizes in bytes.
@@ -51,13 +52,14 @@ class AesCmacBoringSsl : public Mac {
   // the attack described in
   // https://www.math.uwaterloo.ca/~ajmeneze/publications/tightness.pdf. We
   // check this restriction in AesCmacManager.
-  static const size_t kSmallKeySize = 16;
-  static const size_t kBigKeySize = 32;
-  static const size_t kMaxTagSize = 16;
+  static constexpr size_t kSmallKeySize = 16;
+  static constexpr size_t kBigKeySize = 32;
+  static constexpr size_t kMaxTagSize = 16;
 
-  AesCmacBoringSsl(const std::string& key_value, uint32_t tag_size);
+  AesCmacBoringSsl(util::SecretData key, uint32_t tag_size)
+      : key_(std::move(key)), tag_size_(tag_size) {}
 
-  const std::string key_value_;
+  const util::SecretData key_;
   const uint32_t tag_size_;
 };
 

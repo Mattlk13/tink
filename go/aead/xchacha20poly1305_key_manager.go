@@ -1,3 +1,5 @@
+// Copyright 2018 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -17,15 +19,15 @@ package aead
 import (
 	"fmt"
 
-	"github.com/golang/protobuf/proto"
 	"golang.org/x/crypto/chacha20poly1305"
-	"github.com/google/tink/go/keyset"
+	"github.com/golang/protobuf/proto"
+	"github.com/google/tink/go/aead/subtle"
 	"github.com/google/tink/go/core/registry"
-	"github.com/google/tink/go/subtle/aead"
+	"github.com/google/tink/go/keyset"
 	"github.com/google/tink/go/subtle/random"
 
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
-	xcppb "github.com/google/tink/proto/xchacha20_poly1305_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
+	xcppb "github.com/google/tink/go/proto/xchacha20_poly1305_go_proto"
 )
 
 const (
@@ -60,7 +62,7 @@ func (km *xChaCha20Poly1305KeyManager) Primitive(serializedKey []byte) (interfac
 	if err := km.validateKey(key); err != nil {
 		return nil, err
 	}
-	ret, err := aead.NewXChaCha20Poly1305(key.KeyValue)
+	ret, err := subtle.NewXChaCha20Poly1305(key.KeyValue)
 	if err != nil {
 		return nil, fmt.Errorf("xchacha20poly1305_key_manager: cannot create new primitive: %s", err)
 	}

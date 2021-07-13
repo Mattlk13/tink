@@ -17,7 +17,9 @@
 #include <sstream>
 
 #include "tink/util/status.h"
-// placeholder_google3_status_header, please ignore
+
+#include "absl/strings/str_cat.h"
+#include "absl/status/status.h"
 
 using ::std::ostream;
 
@@ -47,7 +49,17 @@ const Status& GetOk() {
 
 }  // namespace
 
-// placeholder_implicit_type_conversion, please ignore
+Status::Status(const ::absl::Status& status)
+    : code_(::crypto::tink::util::error::OK) {
+  if (status.ok()) return;
+  code_ = static_cast<::crypto::tink::util::error::Code>(status.code());
+  message_ = std::string(status.message());
+}
+
+Status::operator ::absl::Status() const {
+  if (ok()) return ::absl::OkStatus();
+  return ::absl::Status(static_cast<absl::StatusCode>(code_), message_);
+}
 
 Status::Status() : code_(::crypto::tink::util::error::OK), message_("") {
 }
@@ -114,10 +126,12 @@ std::string ErrorCodeString(crypto::tink::util::error::Code error) {
       return "UNAVAILABLE";
     case crypto::tink::util::error::DATA_LOSS:
       return "DATA_LOSS";
+    case crypto::tink::util::error::UNAUTHENTICATED:
+      return "UNAUTHENTICATED";
   }
   // Avoid using a "default" in the switch, so that the compiler can
   // give us a warning, but still provide a fallback here.
-  return std::to_string(error);
+  return absl::StrCat(error);
 }
 
 extern ostream& operator<<(ostream& os, crypto::tink::util::error::Code code) {

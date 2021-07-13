@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -19,7 +21,7 @@ import (
 
 	"github.com/google/tink/go/core/registry"
 	"github.com/google/tink/go/subtle/random"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 // Manager manages a Keyset-proto, with convenience methods that rotate, disable, enable or destroy keys.
@@ -48,20 +50,19 @@ func (km *Manager) Rotate(kt *tinkpb.KeyTemplate) error {
 	if kt == nil {
 		return fmt.Errorf("keyset_manager: cannot rotate, need key template")
 	}
+	if kt.OutputPrefixType == tinkpb.OutputPrefixType_UNKNOWN_PREFIX {
+		return fmt.Errorf("keyset_manager: unknown output prefix type")
+	}
 	keyData, err := registry.NewKeyData(kt)
 	if err != nil {
 		return fmt.Errorf("keyset_manager: cannot create KeyData: %s", err)
 	}
 	keyID := km.newKeyID()
-	outputPrefixType := kt.OutputPrefixType
-	if outputPrefixType == tinkpb.OutputPrefixType_UNKNOWN_PREFIX {
-		outputPrefixType = tinkpb.OutputPrefixType_TINK
-	}
 	key := &tinkpb.Keyset_Key{
 		KeyData:          keyData,
 		Status:           tinkpb.KeyStatusType_ENABLED,
 		KeyId:            keyID,
-		OutputPrefixType: outputPrefixType,
+		OutputPrefixType: kt.OutputPrefixType,
 	}
 	// Set the new key as the primary key
 	km.ks.Key = append(km.ks.Key, key)

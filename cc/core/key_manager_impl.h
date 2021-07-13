@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -14,9 +16,12 @@
 #ifndef TINK_CORE_KEY_MANAGER_IMPL_H_
 #define TINK_CORE_KEY_MANAGER_IMPL_H_
 
-#include "tink/core/key_manager_base.h"
+#include "absl/base/casts.h"
+#include "absl/memory/memory.h"
+#include "absl/strings/str_cat.h"
 #include "tink/core/key_type_manager.h"
 #include "tink/key_manager.h"
+#include "tink/util/constants.h"
 #include "tink/util/status.h"
 #include "proto/tink.pb.h"
 
@@ -167,13 +172,13 @@ class KeyManagerImpl<
     if (!this->DoesSupport(key_data.type_url())) {
       return ToStatusF(util::error::INVALID_ARGUMENT,
                        "Key type '%s' is not supported by this manager.",
-                       key_data.type_url().c_str());
+                       key_data.type_url());
     }
     KeyProto key_proto;
     if (!key_proto.ParseFromString(key_data.value())) {
       return ToStatusF(util::error::INVALID_ARGUMENT,
                        "Could not parse key_data.value as key type '%s'.",
-                       key_data.type_url().c_str());
+                       key_data.type_url());
     }
     auto validation = key_type_manager_->ValidateKey(key_proto);
     if (!validation.ok()) {
@@ -188,7 +193,7 @@ class KeyManagerImpl<
     if (!this->DoesSupport(key_type)) {
       return ToStatusF(util::error::INVALID_ARGUMENT,
                        "Key type '%s' is not supported by this manager.",
-                       key_type.c_str());
+                       key_type);
     }
     const KeyProto& key_proto = static_cast<const KeyProto&>(key);
     auto validation = key_type_manager_->ValidateKey(key_proto);
@@ -230,6 +235,64 @@ std::unique_ptr<KeyManager<Primitive>> MakeKeyManager(
       KeyManagerImpl<Primitive, KeyTypeManager<KeyProto, KeyFormatProto,
                                                List<Primitives...>>>>(
       key_type_manager);
+}
+
+// Creates a function which can derive a key, using the given KeyTypeManager.
+// Note that the returned function stores a pointer to the given KeyTypeManager,
+// which must remain valid for the lifetime of the function.
+template <class KeyProto, class KeyFormatProto, class... Primitives>
+std::function<crypto::tink::util::StatusOr<google::crypto::tink::KeyData>(
+    absl::string_view, InputStream*)>
+CreateDeriverFunctionFor(
+    KeyTypeManager<KeyProto, KeyFormatProto, List<Primitives...>>*
+        key_type_manager) {
+  return [key_type_manager](absl::string_view serialized_key_format,
+                            InputStream* randomness)
+             -> crypto::tink::util::StatusOr<google::crypto::tink::KeyData> {
+    KeyFormatProto key_format;
+    if (!key_format.ParseFromString(std::string(serialized_key_format))) {
+      return crypto::tink::util::Status(
+          util::error::INVALID_ARGUMENT,
+          absl::StrCat("Could not parse the passed string as proto '",
+                       KeyFormatProto().GetTypeName(), "'."));
+    }
+    auto status = key_type_manager->ValidateKeyFormat(key_format);
+    if (!status.ok()) {
+      return status;
+    }
+    auto key_proto_or = key_type_manager->DeriveKey(key_format, randomness);
+    if (!key_proto_or.ok()) {
+      return key_proto_or.status();
+    }
+    status = key_type_manager->ValidateKey(key_proto_or.ValueOrDie());
+    if (!status.ok()) {
+      return status;
+    }
+    google::crypto::tink::KeyData result;
+    result.set_type_url(key_type_manager->get_key_type());
+    result.set_value(key_proto_or.ValueOrDie().SerializeAsString());
+    result.set_key_material_type(key_type_manager->key_material_type());
+    return std::move(result);
+  };
+}
+
+// Template specialization of CreateDeriverFor in case the KeyTypeManager has
+// KeyFormatProto = void, and hence there is no key derivation.
+template <class KeyProto, class... Primitives>
+std::function<crypto::tink::util::StatusOr<google::crypto::tink::KeyData>(
+    absl::string_view, InputStream*)>
+CreateDeriverFunctionFor(
+    KeyTypeManager<KeyProto, void, List<Primitives...>>*
+        key_type_manager) {
+  return [key_type_manager](absl::string_view serialized_key_format,
+                            InputStream* randomness)
+             -> crypto::tink::util::StatusOr<google::crypto::tink::KeyData> {
+    return crypto::tink::util::Status(
+        util::error::UNIMPLEMENTED,
+        absl::StrCat("Registered KeyManager for type '",
+                     key_type_manager->get_key_type(),
+                     "' does not support key generation."));
+  };
 }
 
 }  // namespace internal

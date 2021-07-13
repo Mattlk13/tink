@@ -23,7 +23,6 @@ import "proto/hmac.proto";
 
 option java_package = "com.google.crypto.tink.proto";
 option java_multiple_files = true;
-option objc_class_prefix = "TINKPB";
 option go_package = "github.com/google/tink/proto/aes_ctr_hmac_streaming_go_proto";
 
 message AesCtrHmacStreamingParams {
@@ -34,6 +33,7 @@ message AesCtrHmacStreamingParams {
 }
 
 message AesCtrHmacStreamingKeyFormat {
+  uint32 version = 3;
   AesCtrHmacStreamingParams params = 1;
   uint32 key_size = 2;  // size of the main key (aka. "ikm", input key material)
 }

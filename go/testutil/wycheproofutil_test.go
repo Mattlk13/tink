@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -16,14 +18,16 @@ package testutil_test
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/google/tink/go/testutil"
 )
 
-func TestWycheproofParsing(t *testing.T) {
+func TestPopulateSuite(t *testing.T) {
+	testutil.SkipTestIfTestSrcDirIsNotSet(t)
 
+	// TODO(175520475): Test the HexBytes type.
 	type AeadTest struct {
 		testutil.WycheproofCase
 		Key        string `json:"key"`
@@ -44,15 +48,9 @@ func TestWycheproofParsing(t *testing.T) {
 		TestGroups []*AeadGroup `json:"testGroups"`
 	}
 
-	bytes, err := ioutil.ReadFile("../../third_party/wycheproof/testvectors/aes_gcm_test.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	suite := new(AeadSuite)
-	err = json.Unmarshal(bytes, suite)
-	if err != nil {
-		t.Fatal(err)
+	if err := testutil.PopulateSuite(suite, "aes_gcm_test.json"); err != nil {
+		t.Fatalf("error populating suite: %s", err)
 	}
 
 	if suite.Algorithm != "AES-GCM" {
@@ -61,5 +59,31 @@ func TestWycheproofParsing(t *testing.T) {
 
 	if suite.TestGroups[0].Tests[0].Key == "" {
 		t.Error("suite.TestGroups[0].Tests[0].Key is empty")
+	}
+}
+
+func TestPopulateSuite_FileOpenError(t *testing.T) {
+	testutil.SkipTestIfTestSrcDirIsNotSet(t)
+
+	suite := new(testutil.WycheproofSuite)
+	err := testutil.PopulateSuite(suite, "NON_EXISTENT_FILE")
+	if err == nil {
+		t.Error("succeeded with non-existent file")
+	}
+	if _, ok := err.(*os.PathError); !ok {
+		t.Errorf("unexpected error for non-existent file: %s", err)
+	}
+}
+
+func TestPopulateSuite_DecodeError(t *testing.T) {
+	testutil.SkipTestIfTestSrcDirIsNotSet(t)
+
+	var suite *testutil.WycheproofSuite
+	err := testutil.PopulateSuite(suite, "aes_gcm_test.json")
+	if err == nil {
+		t.Error("succeeded with nil suite")
+	}
+	if _, ok := err.(*json.InvalidUnmarshalError); !ok {
+		t.Errorf("unexpected error for decode error: %s", err)
 	}
 }

@@ -24,24 +24,19 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/kms"
-
-	"github.com/google/tink/go/aead"
-	"github.com/google/tink/go/tink"
+	"github.com/aws/aws-sdk-go/service/kms/kmsiface"
 )
 
 // AWSAEAD represents a AWS KMS service to a particular URI.
 type AWSAEAD struct {
 	keyURI string
-	kms    *kms.KMS
+	kms    kmsiface.KMSAPI
 }
 
-var (
-	_       tink.AEAD = (*AWSAEAD)(nil)
-	awsaead           = aead.New
-)
-
-// NewAWSAEAD returns a new AWS KMS service.
-func NewAWSAEAD(keyURI string, kms *kms.KMS) *AWSAEAD {
+// newAWSAEAD returns a new AWS KMS service.
+// keyURI must have the following format: 'arn:<partition>:kms:<region>:[:path]'.
+// See http://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html.
+func newAWSAEAD(keyURI string, kms kmsiface.KMSAPI) *AWSAEAD {
 	return &AWSAEAD{
 		keyURI: keyURI,
 		kms:    kms,
@@ -71,9 +66,19 @@ func (a *AWSAEAD) Encrypt(plaintext, additionalData []byte) ([]byte, error) {
 }
 
 // Decrypt AEAD decrypts the data and verified the additional data.
+//
+// Returns an error if the KeyId field in the response does not match the KeyURI
+// provided when creating the client. If we don't do this, the possibility exists
+// for the ciphertext to be replaced by one under a key we don't control/expect,
+// but do have decrypt permissions on.
+//
+// This check is disabled if AWSAEAD.keyURI is not in key ARN format.
+//
+// See https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#key-id.
 func (a *AWSAEAD) Decrypt(ciphertext, additionalData []byte) ([]byte, error) {
 	ad := hex.EncodeToString(additionalData)
 	req := &kms.DecryptInput{
+		KeyId:             aws.String(a.keyURI),
 		CiphertextBlob:    ciphertext,
 		EncryptionContext: map[string]*string{"additionalData": &ad},
 	}
@@ -83,11 +88,17 @@ func (a *AWSAEAD) Decrypt(ciphertext, additionalData []byte) ([]byte, error) {
 		}
 	}
 	resp, err := a.kms.Decrypt(req)
-	if strings.Compare(*resp.KeyId, a.keyURI) != 0 {
-		return nil, errors.New("decryption failed: wrong key id")
-	}
 	if err != nil {
 		return nil, err
 	}
+	if isKeyArnFormat(a.keyURI) && strings.Compare(*resp.KeyId, a.keyURI) != 0 {
+		return nil, errors.New("decryption failed: wrong key id")
+	}
 	return resp.Plaintext, nil
+}
+
+// isKeyArnFormat returns true if the keyURI is the KMS Key ARN format; false otherwise.
+func isKeyArnFormat(keyURI string) bool {
+	tokens := strings.Split(keyURI, ":")
+	return len(tokens) == 6 && strings.HasPrefix(tokens[5], "key/")
 }

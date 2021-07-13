@@ -18,9 +18,12 @@
 #define TINK_SUBTLE_ECIES_HKDF_RECIPIENT_KEM_BORINGSSL_H_
 
 #include "absl/strings/string_view.h"
-#include "tink/subtle/common_enums.h"
-#include "tink/util/statusor.h"
+#include "openssl/curve25519.h"
 #include "openssl/ec.h"
+#include "tink/internal/fips_utils.h"
+#include "tink/subtle/common_enums.h"
+#include "tink/util/secret_data.h"
+#include "tink/util/statusor.h"
 
 namespace crypto {
 namespace tink {
@@ -32,29 +35,77 @@ class EciesHkdfRecipientKemBoringSsl {
  public:
   // Constructs a recipient KEM for the specified curve and recipient's
   // private key, which must be a big-endian byte array.
-  static
-  crypto::tink::util::StatusOr<std::unique_ptr<EciesHkdfRecipientKemBoringSsl>>
-      New(EllipticCurveType curve, const std::string& priv_key);
+  static crypto::tink::util::StatusOr<
+      std::unique_ptr<EciesHkdfRecipientKemBoringSsl>>
+  New(EllipticCurveType curve, util::SecretData priv_key);
 
   // Computes the ecdh's shared secret from our private key and peer's encoded
   // public key, then uses hkdf to derive the symmetric key from the shared
   // secret, hkdf info and hkdf salt.
-  crypto::tink::util::StatusOr<std::string> GenerateKey(
-      absl::string_view kem_bytes,
-      HashType hash,
-      absl::string_view hkdf_salt,
-      absl::string_view hkdf_info,
-      uint32_t key_size_in_bytes,
-      EcPointFormat point_format) const;
+  virtual crypto::tink::util::StatusOr<util::SecretData> GenerateKey(
+      absl::string_view kem_bytes, HashType hash, absl::string_view hkdf_salt,
+      absl::string_view hkdf_info, uint32_t key_size_in_bytes,
+      EcPointFormat point_format) const = 0;
+
+  virtual ~EciesHkdfRecipientKemBoringSsl() = default;
+};
+
+// Implementation of EciesHkdfRecipientKemBoringSsl for the NIST P-curves.
+class EciesHkdfNistPCurveRecipientKemBoringSsl
+    : public EciesHkdfRecipientKemBoringSsl {
+ public:
+  // Constructs a recipient KEM for the specified curve and recipient's
+  // private key, which must be a big-endian byte array.
+  static crypto::tink::util::StatusOr<
+      std::unique_ptr<EciesHkdfRecipientKemBoringSsl>>
+  New(EllipticCurveType curve, util::SecretData priv_key);
+
+  // Computes the ecdh's shared secret from our private key and peer's encoded
+  // public key, then uses hkdf to derive the symmetric key from the shared
+  // secret, hkdf info and hkdf salt.
+  crypto::tink::util::StatusOr<util::SecretData> GenerateKey(
+      absl::string_view kem_bytes, HashType hash, absl::string_view hkdf_salt,
+      absl::string_view hkdf_info, uint32_t key_size_in_bytes,
+      EcPointFormat point_format) const override;
+
+  static constexpr crypto::tink::internal::FipsCompatibility kFipsStatus =
+      crypto::tink::internal::FipsCompatibility::kNotFips;
 
  private:
-  EciesHkdfRecipientKemBoringSsl(
-      EllipticCurveType curve,
-      const std::string& priv_key_value);
+  EciesHkdfNistPCurveRecipientKemBoringSsl(EllipticCurveType curve,
+                                           util::SecretData priv_key_value,
+                                           EC_GROUP* ec_group);
 
   EllipticCurveType curve_;
-  std::string priv_key_value_;
+  util::SecretData priv_key_value_;
   bssl::UniquePtr<EC_GROUP> ec_group_;
+};
+
+// Implementation of EciesHkdfRecipientKemBoringSsl for curve25519.
+class EciesHkdfX25519RecipientKemBoringSsl
+    : public EciesHkdfRecipientKemBoringSsl {
+ public:
+  // Constructs a recipient KEM for the specified curve and recipient's
+  // private key, which must be a big-endian byte array.
+  static crypto::tink::util::StatusOr<
+      std::unique_ptr<EciesHkdfRecipientKemBoringSsl>>
+  New(EllipticCurveType curve, util::SecretData priv_key);
+
+  // Computes the ecdh's shared secret from our private key and peer's encoded
+  // public key, then uses hkdf to derive the symmetric key from the shared
+  // secret, hkdf info and hkdf salt.
+  crypto::tink::util::StatusOr<util::SecretData> GenerateKey(
+      absl::string_view kem_bytes, HashType hash, absl::string_view hkdf_salt,
+      absl::string_view hkdf_info, uint32_t key_size_in_bytes,
+      EcPointFormat point_format) const override;
+
+  static constexpr crypto::tink::internal::FipsCompatibility kFipsStatus =
+      crypto::tink::internal::FipsCompatibility::kNotFips;
+
+ private:
+  explicit EciesHkdfX25519RecipientKemBoringSsl(util::SecretData private_key);
+
+  util::SecretData private_key_;
 };
 
 }  // namespace subtle

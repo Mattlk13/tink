@@ -18,12 +18,13 @@
 #define TINK_SUBTLE_AES_CTR_BORINGSSL_H_
 
 #include <memory>
+#include <utility>
 
-#include "absl/strings/string_view.h"
-#include "tink/subtle/ind_cpa_cipher.h"
-#include "tink/util/status.h"
-#include "tink/util/statusor.h"
 #include "openssl/evp.h"
+#include "tink/internal/fips_utils.h"
+#include "tink/subtle/ind_cpa_cipher.h"
+#include "tink/util/secret_data.h"
+#include "tink/util/statusor.h"
 
 namespace crypto {
 namespace tink {
@@ -32,7 +33,7 @@ namespace subtle {
 class AesCtrBoringSsl : public IndCpaCipher {
  public:
   static crypto::tink::util::StatusOr<std::unique_ptr<IndCpaCipher>> New(
-      absl::string_view key_value, uint8_t iv_size);
+      util::SecretData key, int iv_size);
 
   crypto::tink::util::StatusOr<std::string> Encrypt(
       absl::string_view plaintext) const override;
@@ -40,18 +41,18 @@ class AesCtrBoringSsl : public IndCpaCipher {
   crypto::tink::util::StatusOr<std::string> Decrypt(
       absl::string_view ciphertext) const override;
 
-  virtual ~AesCtrBoringSsl() {}
+  static constexpr crypto::tink::internal::FipsCompatibility kFipsStatus =
+      crypto::tink::internal::FipsCompatibility::kRequiresBoringCrypto;
 
  private:
-  static const uint8_t MIN_IV_SIZE_IN_BYTES = 12;
-  static const uint8_t BLOCK_SIZE = 16;
+  static constexpr int kMinIvSizeInBytes = 12;
+  static constexpr int kBlockSize = 16;
 
-  AesCtrBoringSsl() {}
-  AesCtrBoringSsl(absl::string_view key_value, uint8_t iv_size,
-                  const EVP_CIPHER *cipher);
+  AesCtrBoringSsl(util::SecretData key, int iv_size, const EVP_CIPHER* cipher)
+      : key_(std::move(key)), iv_size_(iv_size), cipher_(cipher) {}
 
-  const std::string key_;
-  uint8_t iv_size_;
+  const util::SecretData key_;
+  const int iv_size_;
   // cipher_ is a singleton owned by BoringSsl.
   const EVP_CIPHER *cipher_;
 };

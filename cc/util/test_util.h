@@ -21,11 +21,13 @@
 #include <string>
 
 #include "absl/base/thread_annotations.h"
+#include "absl/strings/cord.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "tink/aead.h"
+#include "tink/aead/cord_aead.h"
 #include "tink/deterministic_aead.h"
 #include "tink/hybrid_decrypt.h"
 #include "tink/hybrid_encrypt.h"
@@ -34,11 +36,12 @@
 #include "tink/kms_client.h"
 #include "tink/mac.h"
 #include "tink/output_stream.h"
-#include "tink/random_access_stream.h"
 #include "tink/public_key_sign.h"
 #include "tink/public_key_verify.h"
+#include "tink/random_access_stream.h"
 #include "tink/streaming_aead.h"
 #include "tink/subtle/common_enums.h"
+#include "tink/subtle/mac/stateful_mac.h"
 #include "tink/util/buffer.h"
 #include "tink/util/constants.h"
 #include "tink/util/protobuf_helper.h"
@@ -60,13 +63,13 @@ namespace test {
 // Creates a new test file with the specified 'filename', writes 'size' random
 // bytes to the file, and returns a file descriptor for reading from the file.
 // A copy of the bytes written to the file is returned in 'file_contents'.
-int GetTestFileDescriptor(
-    absl::string_view filename, int size, std::string* file_contents);
+int GetTestFileDescriptor(absl::string_view filename, int size,
+                          std::string* file_contents);
 
 // Creates a new test file with the specified 'filename', with contents from
 // 'file_contents', and returns a file descriptor for reading from the file.
-int GetTestFileDescriptor(
-    absl::string_view filename, absl::string_view file_contents);
+int GetTestFileDescriptor(absl::string_view filename,
+                          absl::string_view file_contents);
 
 // Creates a new test file with the specified 'filename', ready for writing.
 int GetTestFileDescriptor(absl::string_view filename);
@@ -74,16 +77,16 @@ int GetTestFileDescriptor(absl::string_view filename);
 // Reads the test file specified by 'filename', and returns its contents.
 std::string ReadTestFile(std::string filename);
 
-  // Converts a hexadecimal std::string into a std::string of bytes.
+// Converts a hexadecimal string into a string of bytes.
 // Returns a status if the size of the input is odd or if the input contains
 // characters that are not hexadecimal.
 crypto::tink::util::StatusOr<std::string> HexDecode(absl::string_view hex);
 
-// Converts a hexadecimal std::string into a std::string of bytes.
-// Dies if the input is not a valid hexadecimal std::string.
+// Converts a hexadecimal string into a string of bytes.
+// Dies if the input is not a valid hexadecimal string.
 std::string HexDecodeOrDie(absl::string_view hex);
 
-// Converts a std::string of bytes into a hexadecimal std::string.
+// Converts a string of bytes into a hexadecimal string.
 std::string HexEncode(absl::string_view bytes);
 
 // Returns a temporary directory suitable for temporary testing files.
@@ -133,6 +136,30 @@ google::crypto::tink::EciesAeadHkdfPrivateKey GetEciesAesGcmHkdfTestKey(
     google::crypto::tink::EcPointFormat ec_point_format,
     google::crypto::tink::HashType hash_type, uint32_t aes_gcm_key_size);
 
+// Generates a fresh test key for ECIES-AEAD-HKDF for the given curve,
+// using XChaCha20Poly1305 as AEAD, and HKDF with 'hash_type'.
+google::crypto::tink::EciesAeadHkdfPrivateKey
+GetEciesXChaCha20Poly1305HkdfTestKey(
+    google::crypto::tink::EllipticCurveType curve_type,
+    google::crypto::tink::EcPointFormat ec_point_format,
+    google::crypto::tink::HashType hash_type);
+
+// Generates a fresh test key for ECIES-AEAD-HKDF for the given curve,
+// using AesCtrHmac with the specified AEAD params, and HKDF with 'hash_type'.
+google::crypto::tink::EciesAeadHkdfPrivateKey GetEciesAesCtrHmacHkdfTestKey(
+    google::crypto::tink::EllipticCurveType curve_type,
+    google::crypto::tink::EcPointFormat ec_point_format,
+    google::crypto::tink::HashType hash_type, uint32_t aes_ctr_key_size,
+    uint32_t aes_ctr_iv_size, google::crypto::tink::HashType hmac_hash_type,
+    uint32_t hmac_tag_size, uint32_t hmac_key_size);
+
+// Generates a fresh test key for ECIES-AEAD-HKDF for the given curve,
+// using AesSiv as the determinisitic AEAD, and HKDF with 'hash_type'.
+google::crypto::tink::EciesAeadHkdfPrivateKey GetEciesAesSivHkdfTestKey(
+    google::crypto::tink::EllipticCurveType curve_type,
+    google::crypto::tink::EcPointFormat ec_point_format,
+    google::crypto::tink::HashType hash_type);
+
 // Generates a fresh test key for EC DSA for the given 'curve_type', 'hash_type'
 // and 'encoding'.
 google::crypto::tink::EcdsaPrivateKey GetEcdsaTestPrivateKey(
@@ -161,6 +188,46 @@ google::crypto::tink::KeyData AsKeyData(
   return result;
 }
 
+// Uses a z test on the given byte string, expecting all bits to be uniformly
+// set with probability 1/2. Returns non ok status if the z test fails by more
+// than 10 standard deviations.
+//
+// With less statistics jargon: This counts the number of bits set and expects
+// the number to be roughly half of the length of the string. The law of large
+// numbers suggests that we can assume that the longer the string is, the more
+// accurate that estimate becomes for a random string. This test is useful to
+// detect things like strings that are entirely zero.
+//
+// Note: By itself, this is a very weak test for randomness.
+util::Status ZTestUniformString(absl::string_view bytes);
+// Tests that the crosscorrelation of two strings of equal length points to
+// independent and uniformly distributed strings. Returns non ok status if the z
+// test fails by more than 10 standard deviations.
+//
+// With less statistics jargon: This xors two strings and then performs the
+// ZTestUniformString on the result. If the two strings are independent and
+// uniformly distributed, the xor'ed string is as well. A cross correlation test
+// will find whether two strings overlap more or less than it would be expected.
+//
+// Note: Having a correlation of zero is only a necessary but not sufficient
+// condition for independence.
+util::Status ZTestCrosscorrelationUniformStrings(absl::string_view bytes1,
+                                                 absl::string_view bytes2);
+// Tests that the autocorrelation of a string points to the bits being
+// independent and uniformly distributed. Rotates the string in a cyclic
+// fashion. Returns non ok status if the z test fails by more than 10 standard
+// deviations.
+//
+// With less statistics jargon: This rotates the string bit by bit and performs
+// ZTestCrosscorrelationUniformStrings on each of the rotated strings and the
+// original. This will find self similarity of the input string, especially
+// periodic self similarity. For example, it is a decent test to find English
+// text (needs about 180 characters with the current settings).
+//
+// Note: Having a correlation of zero is only a necessary but not sufficient
+// condition for independence.
+util::Status ZTestAutocorrelationUniformString(absl::string_view bytes);
+
 // A dummy implementation of Aead-interface.
 // An instance of DummyAead can be identified by a name specified
 // as a parameter of the constructor.
@@ -180,9 +247,10 @@ class DummyAead : public Aead {
   crypto::tink::util::StatusOr<std::string> Decrypt(
       absl::string_view ciphertext,
       absl::string_view associated_data) const override {
-    std::string prefix = absl::StrCat(aead_name_.size(), ":", associated_data.size(),
-                                 ":", aead_name_, associated_data);
-    if (!StartsWith(ciphertext, prefix)) {
+    std::string prefix =
+        absl::StrCat(aead_name_.size(), ":", associated_data.size(), ":",
+                     aead_name_, associated_data);
+    if (!absl::StartsWith(ciphertext, prefix)) {
       return crypto::tink::util::Status(
           crypto::tink::util::error::INVALID_ARGUMENT,
           "Dummy operation failed.");
@@ -193,6 +261,43 @@ class DummyAead : public Aead {
 
  private:
   std::string aead_name_;
+};
+
+// A dummy implementation of CordAead-interface.
+// An instance of DummyCordAead can be identified by a name specified
+// as a parameter of the constructor.
+class DummyCordAead : public CordAead {
+ public:
+  explicit DummyCordAead(absl::string_view aead_name) : aead_(aead_name) {}
+
+  // Computes a dummy ciphertext, which is concatenation of provided 'plaintext'
+  // with the name of this DummyCordAead.
+  crypto::tink::util::StatusOr<absl::Cord> Encrypt(
+      absl::Cord plaintext, absl::Cord associated_data) const override {
+    auto ciphertext =
+        aead_.Encrypt(plaintext.Flatten(), associated_data.Flatten());
+
+    if (!ciphertext.ok()) return ciphertext.status();
+
+    absl::Cord ciphertext_cord;
+    ciphertext_cord.Append(ciphertext.ValueOrDie());
+    return ciphertext_cord;
+  }
+
+  crypto::tink::util::StatusOr<absl::Cord> Decrypt(
+      absl::Cord ciphertext, absl::Cord associated_data) const override {
+    auto plaintext =
+        aead_.Decrypt(ciphertext.Flatten(), associated_data.Flatten());
+
+    if (!plaintext.ok()) return plaintext.status();
+
+    absl::Cord plaintext_cord;
+    plaintext_cord.Append(plaintext.ValueOrDie());
+    return plaintext_cord;
+  }
+
+ private:
+  DummyAead aead_;
 };
 
 // A dummy implementation of DeterministicAead-interface.
@@ -265,8 +370,10 @@ class DummyStreamingAead : public StreamingAead {
    public:
     DummyEncryptingStream(std::unique_ptr<crypto::tink::OutputStream> ct_dest,
                           absl::string_view header)
-        : ct_dest_(std::move(ct_dest)), header_(header),
-          after_init_(false), status_(util::OkStatus()) {}
+        : ct_dest_(std::move(ct_dest)),
+          header_(header),
+          after_init_(false),
+          status_(util::OkStatus()) {}
 
     crypto::tink::util::StatusOr<int> Next(void** data) override {
       if (!after_init_) {  // Try to initialize.
@@ -302,7 +409,7 @@ class DummyStreamingAead : public StreamingAead {
     }
     util::Status Close() override {
       if (!after_init_) {  // Call Next() to write the header to ct_dest_.
-        void *buf;
+        void* buf;
         auto next_result = Next(&buf);
         if (next_result.ok()) {
           BackUp(next_result.ValueOrDie());
@@ -329,8 +436,10 @@ class DummyStreamingAead : public StreamingAead {
    public:
     DummyDecryptingStream(std::unique_ptr<crypto::tink::InputStream> ct_source,
                           absl::string_view expected_header)
-        : ct_source_(std::move(ct_source)), exp_header_(expected_header),
-          after_init_(false), status_(util::OkStatus()) {}
+        : ct_source_(std::move(ct_source)),
+          exp_header_(expected_header),
+          after_init_(false),
+          status_(util::OkStatus()) {}
 
     crypto::tink::util::StatusOr<int> Next(const void** data) override {
       if (!after_init_) {  // Try to initialize.
@@ -339,8 +448,8 @@ class DummyStreamingAead : public StreamingAead {
         if (!next_result.ok()) {
           status_ = next_result.status();
           if (status_.error_code() == util::error::OUT_OF_RANGE) {
-            status_ = util::Status(
-                util::error::INVALID_ARGUMENT, "Could not read header");
+            status_ = util::Status(util::error::INVALID_ARGUMENT,
+                                   "Could not read header");
           }
           return status_;
         }
@@ -348,8 +457,8 @@ class DummyStreamingAead : public StreamingAead {
           status_ = util::Status(util::error::INTERNAL, "Buffer too small");
         } else if (memcmp((*data), exp_header_.data(),
                           static_cast<int>(exp_header_.size()))) {
-          status_ = util::Status(
-              util::error::INVALID_ARGUMENT, "Corrupted header");
+          status_ =
+              util::Status(util::error::INVALID_ARGUMENT, "Corrupted header");
         }
         if (status_.ok()) {
           ct_source_->BackUp(next_result.ValueOrDie() - exp_header_.size());
@@ -384,13 +493,14 @@ class DummyStreamingAead : public StreamingAead {
   // that is expected to be equal to 'expected_header'.  If this
   // header matching succeeds, all subsequent method calls are forwarded
   // to the corresponding methods of 'cd_source'.
-  class DummyDecryptingRandomAccessStream :
-      public crypto::tink::RandomAccessStream {
+  class DummyDecryptingRandomAccessStream
+      : public crypto::tink::RandomAccessStream {
    public:
     DummyDecryptingRandomAccessStream(
         std::unique_ptr<crypto::tink::RandomAccessStream> ct_source,
         absl::string_view expected_header)
-        : ct_source_(std::move(ct_source)), exp_header_(expected_header),
+        : ct_source_(std::move(ct_source)),
+          exp_header_(expected_header),
           status_(util::Status(util::error::UNAVAILABLE, "not initialized")) {}
 
     crypto::tink::util::Status PRead(
@@ -403,8 +513,8 @@ class DummyStreamingAead : public StreamingAead {
       }
       auto status = dest_buffer->set_size(0);
       if (!status.ok()) return status;
-      return ct_source_->PRead(
-          position + exp_header_.size(), count, dest_buffer);
+      return ct_source_->PRead(position + exp_header_.size(), count,
+                               dest_buffer);
     }
 
     util::StatusOr<int64_t> size() override {
@@ -421,26 +531,25 @@ class DummyStreamingAead : public StreamingAead {
     }
 
    private:
-    void Initialize() EXCLUSIVE_LOCKS_REQUIRED(status_mutex_) {
-      auto buf = std::move(
-          util::Buffer::New(exp_header_.size()).ValueOrDie());
+    void Initialize() ABSL_EXCLUSIVE_LOCKS_REQUIRED(status_mutex_) {
+      auto buf = std::move(util::Buffer::New(exp_header_.size()).ValueOrDie());
       status_ = ct_source_->PRead(0, exp_header_.size(), buf.get());
-      if (!status_.ok() &&
-          status_.error_code() != util::error::OUT_OF_RANGE) return;
+      if (!status_.ok() && status_.error_code() != util::error::OUT_OF_RANGE)
+        return;
       if (buf->size() < exp_header_.size()) {
-        status_ = util::Status(
-            util::error::INVALID_ARGUMENT, "Could not read header");
+        status_ = util::Status(util::error::INVALID_ARGUMENT,
+                               "Could not read header");
       } else if (memcmp(buf->get_mem_block(), exp_header_.data(),
                         static_cast<int>(exp_header_.size()))) {
-        status_ = util::Status(
-            util::error::INVALID_ARGUMENT, "Corrupted header");
+        status_ =
+            util::Status(util::error::INVALID_ARGUMENT, "Corrupted header");
       }
     }
 
     std::unique_ptr<crypto::tink::RandomAccessStream> ct_source_;
     std::string exp_header_;
     mutable absl::Mutex status_mutex_;
-    util::Status status_ GUARDED_BY(status_mutex_);
+    util::Status status_ ABSL_GUARDED_BY(status_mutex_);
   };  // class DummyDecryptingRandomAccessStream
 
  private:
@@ -549,6 +658,29 @@ class DummyMac : public Mac {
   DummyAead dummy_aead_;
 };
 
+// A dummy implementation of Stateful Mac interface.
+// An instance of DummyStatefulMac can be identified by a name specified
+// as a parameter of the constructor.
+// Over the same inputs, the DummyStatefulMac and DummyMac should give the same
+// output; DummyStatefulMac builds and internal_state_ and calls DummyMac.
+class DummyStatefulMac : public subtle::StatefulMac {
+ public:
+  explicit DummyStatefulMac(const std::string& mac_name)
+      : dummy_aead_(absl::StrCat("DummyMac:", mac_name)), buffer_("") {}
+
+  util::Status Update(absl::string_view data) override {
+    absl::StrAppend(&buffer_, data);
+    return util::OkStatus();
+  }
+  util::StatusOr<std::string> Finalize() override {
+    return dummy_aead_.Encrypt("", buffer_);
+  }
+
+ private:
+  DummyAead dummy_aead_;
+  std::string buffer_;
+};
+
 // A dummy implementation of KeysetWriter-interface.
 class DummyKeysetWriter : public KeysetWriter {
  public:
@@ -584,14 +716,15 @@ class DummyKmsClient : public KmsClient {
 
   bool DoesSupport(absl::string_view key_uri) const override {
     if (key_uri.empty()) return false;
-    if (key_uri_.empty()) return StartsWith(key_uri, uri_prefix_);
+    if (key_uri_.empty()) return absl::StartsWith(key_uri, uri_prefix_);
     return key_uri == key_uri_;
   }
 
   crypto::tink::util::StatusOr<std::unique_ptr<Aead>> GetAead(
       absl::string_view key_uri) const override {
-    if (!DoesSupport(key_uri)) return crypto::tink::util::Status(
-            util::error::INVALID_ARGUMENT, "key_uri not supported");
+    if (!DoesSupport(key_uri))
+      return crypto::tink::util::Status(util::error::INVALID_ARGUMENT,
+                                        "key_uri not supported");
     return {absl::make_unique<DummyAead>(key_uri)};
   }
 

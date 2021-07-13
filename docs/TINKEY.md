@@ -5,7 +5,22 @@ decrypt keysets with master keys residing in a remote key management service
 (KMS). Out of the box it supports AWS KMS and Google Cloud KMS. Adding support
 for other KMS is easy, and doesn't require modifying Tinkey.
 
-## Build
+Tinkey requires Java 8 or later to run.
+
+## Install from prebuilt binaries
+
+Download the latest version of Tinkey from
+https://storage.googleapis.com/tinkey/tinkey-1.6.1.tar.gz. This version should
+work well on Linux, macOS and Windows.
+
+## Install with Homebrew
+
+```sh
+brew tap google/tink https://github.com/google/tink
+brew install tinkey
+```
+
+## Build from source
 
 -   Install [Bazel](https://docs.bazel.build/versions/master/install.html)
 
@@ -18,11 +33,11 @@ git clone https://github.com/google/tink.git
 -   Build
 
 ```shell
-cd tink
-bazel build tools/tinkey/...
+cd tink/tools
+bazel build tinkey
 ```
 
-The binary is located at `bazel-bin/tools/tinkey/tinkey`.
+The binary is located at `bazel-bin/tinkey/tinkey`.
 
 ## Usage
 
@@ -140,7 +155,7 @@ tinkey create-keyset --key-template AES128_GCM --out encrypted-keyset.cfg \
     `credentials.json`
 
 ```shell
-tinkey create-keyset --in encrypted-keyset.cfg \
+tinkey list-keyset --in encrypted-keyset.cfg \
 --master-key-uri gcp-kms://projects/tink-examples/locations/global/keyRings/foo/cryptoKeys/bar
 --credential credential.json
 ```

@@ -17,9 +17,11 @@
 #ifndef TINK_UTIL_STATUSOR_H_
 #define TINK_UTIL_STATUSOR_H_
 
+#include <cstdlib>
 #include <iostream>
 #include <utility>
 
+#include "absl/status/statusor.h"
 #include "tink/util/status.h"
 
 namespace crypto {
@@ -31,10 +33,12 @@ template <typename T>
 class ABSL_MUST_USE_RESULT StatusOr;
 #endif
 
+// TODO(b/122292096): Migrate this to absl::StatusOr
 // A StatusOr holds a Status (in the case of an error), or a value T.
 template <typename T>
 class StatusOr {
  public:
+  using type = T;
   // Has status UNKNOWN.
   inline StatusOr();
 
@@ -74,44 +78,73 @@ class StatusOr {
 
   // Returns value or crashes if ok() is false.
   inline const T& ValueOrDie() const& {
-    if (!ok()) {
-      std::cerr << "Attempting to fetch value of non-OK StatusOr\n";
-      std::cerr << status() << std::endl;
-      exit(1);
-    }
-    return value_;
+    EnsureOk();
+    return *value_;
   }
   inline T& ValueOrDie() & {
-    if (!ok()) {
-      std::cerr << "Attempting to fetch value of non-OK StatusOr\n";
-      std::cerr << status() << std::endl;
-      exit(1);
-    }
-    return value_;
+    EnsureOk();
+    return *value_;
   }
   inline const T&& ValueOrDie() const&& {
-    if (!ok()) {
-      std::cerr << "Attempting to fetch value of non-OK StatusOr\n";
-      std::cerr << status() << std::endl;
-      exit(1);
-    }
-    return std::move(value_);
+    EnsureOk();
+    return *std::move(value_);
   }
   inline T&& ValueOrDie() && {
-    if (!ok()) {
-      std::cerr << "Attempting to fetch value of non-OK StatusOr\n";
-      std::cerr << status() << std::endl;
-      exit(1);
-    }
-    return std::move(value_);
+    EnsureOk();
+    return *std::move(value_);
+  }
+
+  // Implicitly convertible to absl::StatusOr. Implicit conversions explicitly
+  // allowed by style arbiter waiver in cl/351594378.
+  operator ::absl::StatusOr<T>() const&;  // NOLINT
+  operator ::absl::StatusOr<T>() &&;      // NOLINT
+
+  // Returns value or crashes if ok() is false.
+  inline const T& operator*() const& {
+    EnsureOk();
+    return *value_;
+  }
+
+  inline T& operator*() & {
+    EnsureOk();
+    return *value_;
+  }
+
+  inline T&& operator*() && {
+    EnsureOk();
+    return *std::move(value_);
+  }
+
+  inline const T&& operator*() const&& {
+    EnsureOk();
+    return *std::move(value_);
+  }
+
+  // Returns reference to value or crashes if ok() is false.
+  T* operator->() {
+    EnsureOk();
+    return &(value_.value());
+  }
+
+  const T* operator->() const {
+    EnsureOk();
+    return &(value_.value());
   }
 
   template <typename U>
   friend class StatusOr;
 
  private:
+  void EnsureOk() const {
+    if (ABSL_PREDICT_FALSE(!ok())) {
+      std::cerr << "Attempting to fetch value of non-OK StatusOr\n";
+      std::cerr << status() << std::endl;
+      std::_Exit(1);
+    }
+  }
+
   Status status_;
-  T value_;
+  absl::optional<T> value_;
 };
 
 // Implementation.
@@ -127,7 +160,7 @@ inline StatusOr<T>::StatusOr(
   if (status.ok()) {
     std::cerr << "::crypto::tink::util::OkStatus() "
               << "is not a valid argument to StatusOr\n";
-    exit(1);
+    std::_Exit(1);
   }
 }
 
@@ -159,7 +192,9 @@ template <typename T>
 inline const StatusOr<T>& StatusOr<T>::operator=(const StatusOr& other) {
   status_ = other.status_;
   if (status_.ok()) {
-    value_ = other.value_;
+    value_ = *other.value_;
+  } else {
+    value_ = absl::nullopt;
   }
   return *this;
 }
@@ -169,10 +204,25 @@ template <typename U>
 inline const StatusOr<T>& StatusOr<T>::operator=(const StatusOr<U>& other) {
   status_ = other.status_;
   if (status_.ok()) {
-    value_ = other.value_;
+    value_ = *other.value_;
+  } else {
+    value_ = absl::nullopt;
   }
   return *this;
 }
+
+template <typename T>
+StatusOr<T>::operator ::absl::StatusOr<T>() const& {
+  if (!ok()) return ::absl::Status(status_);
+  return *value_;
+}
+
+template <typename T>
+StatusOr<T>::operator ::absl::StatusOr<T>() && {
+  if (!ok()) return ::absl::Status(std::move(status_));
+  return std::move(*value_);
+}
+
 
 }  // namespace util
 }  // namespace tink

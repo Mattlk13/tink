@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -23,7 +25,7 @@ import (
 	"github.com/google/tink/go/core/primitiveset"
 	"github.com/google/tink/go/core/registry"
 	"github.com/google/tink/go/tink"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 var errInvalidKeyset = fmt.Errorf("keyset.Handle: invalid keyset")
@@ -116,11 +118,13 @@ func (h *Handle) Public() (*Handle, error) {
 // String returns a string representation of the managed keyset.
 // The result does not contain any sensitive key material.
 func (h *Handle) String() string {
-	info, err := getKeysetInfo(h.ks)
-	if err != nil {
-		return ""
-	}
-	return info.String()
+	return proto.CompactTextString(getKeysetInfo(h.ks))
+}
+
+// KeysetInfo returns KeysetInfo representation of the managed keyset.
+// The result does not contain any sensitive key material.
+func (h *Handle) KeysetInfo() *tinkpb.KeysetInfo {
+	return getKeysetInfo(h.ks)
 }
 
 // Write encrypts and writes the enclosing keyset.
@@ -208,9 +212,9 @@ func (h *Handle) hasSecrets() bool {
 		if k.KeyData.KeyMaterialType == tinkpb.KeyData_ASYMMETRIC_PRIVATE {
 			return true
 		}
-    if k.KeyData.KeyMaterialType == tinkpb.KeyData_SYMMETRIC {
-    	return true
-    }
+		if k.KeyData.KeyMaterialType == tinkpb.KeyData_SYMMETRIC {
+			return true
+		}
 	}
 	return false
 }
@@ -255,46 +259,35 @@ func encrypt(keyset *tinkpb.Keyset, masterKey tink.AEAD) (*tinkpb.EncryptedKeyse
 		return nil, fmt.Errorf("keyset.Handle: encrypted failed: %s", err)
 	}
 	// get keyset info
-	info, err := getKeysetInfo(keyset)
-	if err != nil {
-		return nil, fmt.Errorf("keyset.Handle: cannot get keyset info: %s", err)
-	}
 	encryptedKeyset := &tinkpb.EncryptedKeyset{
 		EncryptedKeyset: encrypted,
-		KeysetInfo:      info,
+		KeysetInfo:      getKeysetInfo(keyset),
 	}
 	return encryptedKeyset, nil
 }
 
 // getKeysetInfo returns a KeysetInfo from a Keyset protobuf.
-func getKeysetInfo(keyset *tinkpb.Keyset) (*tinkpb.KeysetInfo, error) {
+func getKeysetInfo(keyset *tinkpb.Keyset) *tinkpb.KeysetInfo {
 	if keyset == nil {
-		return nil, errors.New("keyset.Handle: keyset must be non nil")
+		panic("keyset.Handle: keyset must be non nil")
 	}
 	nKey := len(keyset.Key)
 	keyInfos := make([]*tinkpb.KeysetInfo_KeyInfo, nKey)
 	for i, key := range keyset.Key {
-		info, err := getKeyInfo(key)
-		if err != nil {
-			return nil, err
-		}
-		keyInfos[i] = info
+		keyInfos[i] = getKeyInfo(key)
 	}
 	return &tinkpb.KeysetInfo{
 		PrimaryKeyId: keyset.PrimaryKeyId,
 		KeyInfo:      keyInfos,
-	}, nil
+	}
 }
 
 // getKeyInfo returns a KeyInfo from a Key protobuf.
-func getKeyInfo(key *tinkpb.Keyset_Key) (*tinkpb.KeysetInfo_KeyInfo, error) {
-	if key == nil {
-		return nil, errors.New("keyset.Handle: keyset must be non nil")
-	}
+func getKeyInfo(key *tinkpb.Keyset_Key) *tinkpb.KeysetInfo_KeyInfo {
 	return &tinkpb.KeysetInfo_KeyInfo{
 		TypeUrl:          key.KeyData.TypeUrl,
 		Status:           key.Status,
 		KeyId:            key.KeyId,
 		OutputPrefixType: key.OutputPrefixType,
-	}, nil
+	}
 }

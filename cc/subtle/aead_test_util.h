@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -16,6 +18,7 @@
 
 #include "absl/strings/string_view.h"
 #include "tink/aead.h"
+#include "tink/aead/cord_aead.h"
 #include "tink/util/status.h"
 
 namespace crypto {
@@ -23,7 +26,15 @@ namespace tink {
 
 // Encrypt, then decrypt. Any error will be propagated to the caller. Returns OK
 // if the resulting decryption is equal to the plaintext.
-crypto::tink::util::Status EncryptThenDecrypt(Aead* encrypter, Aead* decrypter,
+crypto::tink::util::Status EncryptThenDecrypt(const Aead& encrypter,
+                                              const Aead& decrypter,
+                                              absl::string_view message,
+                                              absl::string_view aad);
+
+// Encrypt, then decrypt. Any error will be propagated to the caller. Returns OK
+// if the resulting decryption is equal to the plaintext.
+crypto::tink::util::Status EncryptThenDecrypt(const CordAead& encrypter,
+                                              const CordAead& decrypter,
                                               absl::string_view message,
                                               absl::string_view aad);
 

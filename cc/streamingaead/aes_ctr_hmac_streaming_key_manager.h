@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -14,10 +16,10 @@
 #ifndef TINK_STREAMINGAEAD_AES_CTR_HMAC_STREAMING_KEY_MANAGER_H_
 #define TINK_STREAMINGAEAD_AES_CTR_HMAC_STREAMING_KEY_MANAGER_H_
 
-#include <algorithm>
-#include <vector>
+#include <string>
 
-#include "absl/strings/string_view.h"
+#include "absl/memory/memory.h"
+#include "absl/strings/str_cat.h"
 #include "tink/core/key_type_manager.h"
 #include "tink/streaming_aead.h"
 #include "tink/subtle/aes_ctr_hmac_streaming.h"
@@ -25,6 +27,7 @@
 #include "tink/util/enums.h"
 #include "tink/util/errors.h"
 #include "tink/util/protobuf_helper.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
 #include "proto/aes_ctr_hmac_streaming.pb.h"
@@ -44,7 +47,7 @@ class AesCtrHmacStreamingKeyManager
         const google::crypto::tink::AesCtrHmacStreamingKey& key)
         const override {
           subtle::AesCtrHmacStreaming::Params params;
-          params.ikm = key.key_value();
+          params.ikm = util::SecretDataFromStringView(key.key_value());
           params.hkdf_algo = crypto::tink::util::Enums::ProtoToSubtle(
               key.params().hkdf_hash_type());
           params.key_size = key.params().derived_key_size();
@@ -86,6 +89,11 @@ class AesCtrHmacStreamingKeyManager
   crypto::tink::util::StatusOr<google::crypto::tink::AesCtrHmacStreamingKey>
   CreateKey(const google::crypto::tink::AesCtrHmacStreamingKeyFormat&
                 key_format) const override;
+
+  crypto::tink::util::StatusOr<google::crypto::tink::AesCtrHmacStreamingKey>
+  DeriveKey(
+      const google::crypto::tink::AesCtrHmacStreamingKeyFormat& key_format,
+      InputStream* input_stream) const override;
 
   ~AesCtrHmacStreamingKeyManager() override {}
 

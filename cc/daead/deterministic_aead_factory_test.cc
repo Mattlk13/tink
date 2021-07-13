@@ -21,6 +21,7 @@
 #include "tink/daead/aes_siv_key_manager.h"
 #include "tink/daead/deterministic_aead_config.h"
 #include "tink/deterministic_aead.h"
+#include "tink/internal/key_info.h"
 #include "tink/keyset_handle.h"
 #include "tink/util/test_keyset_handle.h"
 #include "tink/util/status.h"
@@ -99,7 +100,7 @@ TEST_F(DeterministicAeadFactoryTest, testPrimitive) {
   EXPECT_TRUE(encrypt_result.ok()) << encrypt_result.status();
   std::string ciphertext = encrypt_result.ValueOrDie();
   std::string prefix =
-      CryptoFormat::get_output_prefix(keyset.key(2)).ValueOrDie();
+      CryptoFormat::GetOutputPrefix(KeyInfoFromKey(keyset.key(2))).ValueOrDie();
   EXPECT_PRED_FORMAT2(testing::IsSubstring, prefix, ciphertext);
 
   auto decrypt_result = daead->DecryptDeterministically(ciphertext, aad);

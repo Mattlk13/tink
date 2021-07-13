@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -25,7 +27,7 @@ namespace subtle {
 // Returnes big endian order representation of |val|.
 std::string BigEndian32(uint32_t val);
 
-// Like std::string::resize, but the newly allocated storage may be left
+// Like string::resize, but the newly allocated storage may be left
 // uninitialized. C++11 provides no portable way to do this. Using this function
 // allows us to do this on a per compiler/library version basis.
 void ResizeStringUninitialized(std::string* s, size_t new_size);

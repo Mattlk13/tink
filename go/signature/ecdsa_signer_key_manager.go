@@ -1,3 +1,5 @@
+// Copyright 2018 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -22,12 +24,11 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/google/tink/go/keyset"
-	"github.com/google/tink/go/core/registry"
-	subtleSignature "github.com/google/tink/go/subtle/signature"
+	subtleSignature "github.com/google/tink/go/signature/subtle"
 	"github.com/google/tink/go/subtle"
-	commonpb "github.com/google/tink/proto/common_go_proto"
-	ecdsapb "github.com/google/tink/proto/ecdsa_go_proto"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	commonpb "github.com/google/tink/go/proto/common_go_proto"
+	ecdsapb "github.com/google/tink/go/proto/ecdsa_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 const (
@@ -42,9 +43,6 @@ var errInvalidECDSASignKeyFormat = errors.New("ecdsa_signer_key_manager: invalid
 // ecdsaSignerKeyManager is an implementation of KeyManager interface.
 // It generates new ECDSAPrivateKeys and produces new instances of ECDSASign subtle.
 type ecdsaSignerKeyManager struct{}
-
-// Assert that ecdsaSignerKeyManager implements the PrivateKeyManager interface.
-var _ registry.PrivateKeyManager = (*ecdsaSignerKeyManager)(nil)
 
 // newECDSASignerKeyManager creates a new ecdsaSignerKeyManager.
 func newECDSASignerKeyManager() *ecdsaSignerKeyManager {

@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -53,8 +55,7 @@ StatusOr<const KmsClient*> KmsClients::LocalGet(absl::string_view key_uri) {
   for (const auto& client : clients_) {
     if (client->DoesSupport(key_uri)) return client.get();
   }
-  return ToStatusF(util::error::NOT_FOUND,
-                   "no KmsClient found for key '%s'.",
+  return ToStatusF(util::error::NOT_FOUND, "no KmsClient found for key '%s'.",
                    std::string(key_uri).c_str());
 }
 

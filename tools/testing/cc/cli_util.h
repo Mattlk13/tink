@@ -52,11 +52,22 @@ class CliUtil {
   static std::unique_ptr<crypto::tink::KeysetHandle> ReadKeyset(
       const std::string& filename);
 
+  // Writes a keyset into the specified file.
+  // In case of errors writes a log message and aborts.
+  static void WriteKeyset(const crypto::tink::KeysetHandle& keyset_handle,
+                          const std::string& filename);
+
   // Initializes Tink registry.
   // In case of errors writes a log message and aborts.
   static void InitTink();
 
-  // Reads the specified file and returns the contents as a std::string.
+  // Initializes a GCP client.
+  static crypto::tink::util::Status InitGcp();
+
+  // Initializes an AWS client.
+  static crypto::tink::util::Status InitAws();
+
+  // Reads the specified file and returns the contents as a string.
   // In case of errors writes a log message and aborts.
   static std::string Read(const std::string& filename);
 

@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -20,7 +22,7 @@ import (
 
 	"github.com/google/tink/go/internal"
 	"github.com/google/tink/go/keyset"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 var (
@@ -35,7 +37,7 @@ var (
 	errInvalidWriter = errors.New("cleartextkeyset: invalid writer")
 )
 
-// NewHandle creates a new instance of NewHandle using the given keyset.
+// NewHandle creates a new instance of Handle using the given keyset.
 func NewHandle(ks *tinkpb.Keyset) (*keyset.Handle, error) {
 	if ks == nil || len(ks.Key) == 0 {
 		return nil, errInvalidKeyset

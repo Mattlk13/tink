@@ -17,14 +17,17 @@
 #ifndef TINK_SUBTLE_SUBTLE_UTIL_BORINGSSL_H_
 #define TINK_SUBTLE_SUBTLE_UTIL_BORINGSSL_H_
 
+#include <cstdint>
 #include <vector>
 
 #include "absl/strings/string_view.h"
 #include "openssl/bn.h"
 #include "openssl/cipher.h"
+#include "openssl/curve25519.h"
 #include "openssl/err.h"
 #include "openssl/evp.h"
 #include "tink/subtle/common_enums.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
 
@@ -38,7 +41,12 @@ class SubtleUtilBoringSSL {
     EllipticCurveType curve;
     std::string pub_x;  // affine coordinates in bigendian representation
     std::string pub_y;
-    std::string priv;  // big integer in bigendian represnetation
+    util::SecretData priv;  // big integer in bigendian representation
+  };
+
+  struct X25519Key {
+    uint8_t public_value[X25519_PUBLIC_VALUE_LEN];
+    uint8_t private_key[X25519_PRIVATE_KEY_LEN];
   };
 
   struct Ed25519Key {
@@ -86,30 +94,34 @@ class SubtleUtilBoringSSL {
     std::string e;
     // Private exponent.
     // Unsigned big integer in bigendian representation.
-    std::string d;
+    util::SecretData d;
 
     // The prime factor p of n.
     // Unsigned big integer in bigendian representation.
-    std::string p;
+    util::SecretData p;
     // The prime factor q of n.
     // Unsigned big integer in bigendian representation.
-    std::string q;
+    util::SecretData q;
     // d mod (p - 1).
-    std::string dp;
+    util::SecretData dp;
     // d mod (q - 1).
     // Unsigned big integer in bigendian representation.
-    std::string dq;
+    util::SecretData dq;
     // Chinese Remainder Theorem coefficient q^(-1) mod p.
     // Unsigned big integer in bigendian representation.
-    std::string crt;
+    util::SecretData crt;
   };
 
-  // Returns BoringSSL's BIGNUM constructed from bigendian std::string
+  // Returns BoringSSL's BIGNUM constructed from bigendian string
   // representation.
   static util::StatusOr<bssl::UniquePtr<BIGNUM>> str2bn(absl::string_view s);
 
-  // Returns a std::string of size 'len' that holds BIGNUM 'bn'.
+  // Returns a string of size 'len' that holds BIGNUM 'bn'.
   static util::StatusOr<std::string> bn2str(const BIGNUM *bn, size_t len);
+
+  // Returns a SecretData of size 'len' that holds BIGNUM 'bn'.
+  static util::StatusOr<util::SecretData> BignumToSecretData(const BIGNUM *bn,
+                                                             size_t len);
 
   // Returns BoringSSL error strings accumulated in the error queue,
   // thus emptying the queue.
@@ -128,8 +140,26 @@ class SubtleUtilBoringSSL {
   static crypto::tink::util::StatusOr<EcKey> GetNewEcKey(
       EllipticCurveType curve_type);
 
+  // Returns a new EC key for the specified curve derived from a seed.
+  static crypto::tink::util::StatusOr<EcKey> GetNewEcKeyFromSeed(
+      EllipticCurveType curve_type, const util::SecretData &secret_seed);
+
+  // Returns a new X25519 key.
+  static std::unique_ptr<X25519Key> GenerateNewX25519Key();
+
+  // Returns a X25519Key matching the specified EcKey.
+  static crypto::tink::util::StatusOr<std::unique_ptr<X25519Key>>
+  X25519KeyFromEcKey(const EcKey &ec_key);
+
+  // Returns an EcKey matching the specified X25519Key.
+  static EcKey EcKeyFromX25519Key(const X25519Key *x25519_key);
+
   // Returns a new ED25519 key.
   static std::unique_ptr<Ed25519Key> GetNewEd25519Key();
+
+  // Returns a new ED25519 key generated from a 32-byte secret seed.
+  static std::unique_ptr<Ed25519Key> GetNewEd25519KeyFromSeed(
+      const util::SecretData &secret_seed);
 
   // Returns BoringSSL's EC_POINT constructed from curve type, point format and
   // encoded public key's point. The uncompressed point is encoded as
@@ -151,8 +181,22 @@ class SubtleUtilBoringSSL {
 
   // Returns the ECDH's shared secret based on our private key and peer's public
   // key. Returns error if the public key is not on private key's curve.
-  static crypto::tink::util::StatusOr<std::string> ComputeEcdhSharedSecret(
+  static crypto::tink::util::StatusOr<util::SecretData> ComputeEcdhSharedSecret(
       EllipticCurveType curve, const BIGNUM *priv_key, const EC_POINT *pub_key);
+
+  // Transforms ECDSA IEEE_P1363 signature encoding to DER encoding.
+  //
+  // The IEEE_P1363 signature's format is r || s, where r and s are zero-padded
+  // and have the same size in bytes as the order of the curve. For example, for
+  // NIST P-256 curve, r and s are zero-padded to 32 bytes.
+  //
+  // The DER signature is encoded using ASN.1
+  // (https://tools.ietf.org/html/rfc5480#appendix-A):
+  //   ECDSA-Sig-Value :: = SEQUENCE { r INTEGER, s INTEGER }.
+  // In particular, the encoding is:
+  //   0x30 || totalLength || 0x02 || r's length || r || 0x02 || s's length || s
+  static crypto::tink::util::StatusOr<std::string> EcSignatureIeeeToDer(
+      const EC_GROUP *group, absl::string_view ieee_sig);
 
   // Returns an EVP structure for a hash function.
   // The EVP_MD instances are sigletons owned by BoringSSL.
@@ -164,13 +208,22 @@ class SubtleUtilBoringSSL {
       subtle::HashType sig_hash);
 
   // Validates whether 'modulus_size' is at least 2048-bit.
-  // To reach 128-bit security strength, RSA's modulus must be at least 3072-bit
-  // while 2048-bit RSA key only has 112-bit security. Nevertheless, a 2048-bit
-  // RSA key is considered safe by NIST until 2030 (see
+  // To reach 128-bit security strength, RSA's modulus must be at least
+  // 3072-bit while 2048-bit RSA key only has 112-bit security. Nevertheless,
+  // a 2048-bit RSA key is considered safe by NIST until 2030 (see
   // https://www.keylength.com/en/4/).
   static crypto::tink::util::Status ValidateRsaModulusSize(size_t modulus_size);
 
-  // Return an empty std::string if str.data() is nullptr; otherwise return str.
+  // Validates whether 'publicExponent' is odd and greater than 65536. The
+  // primes p and q are chosen such that (p-1)(q-1) is relatively prime to the
+  // public exponent. Therefore, the public exponent must be odd. Furthermore,
+  // choosing a public exponent which is not greater than 65536 can lead to weak
+  // instantiations of RSA. A public exponent which is odd and greater than
+  // 65536 conforms to the requirements set by NIST FIPS 186-4 (Appendix B.3.1).
+  static crypto::tink::util::Status ValidateRsaPublicExponent(
+      absl::string_view exponent);
+
+  // Return an empty string if str.data() is nullptr; otherwise return str.
   static absl::string_view EnsureNonNull(absl::string_view str);
 
   // Creates a new RSA public and private key pair.
@@ -188,8 +241,22 @@ class SubtleUtilBoringSSL {
   // Copies the CRT params and dp, dq into the RSA key.
   static util::Status CopyCrtParams(const RsaPrivateKey &key, RSA *rsa);
 
+  // Creates a BoringSSL RSA key from an RsaPrivateKey.
+  static util::StatusOr<bssl::UniquePtr<RSA>> BoringSslRsaFromRsaPrivateKey(
+      const RsaPrivateKey &key);
+
+  // Creates a BoringSSL RSA key from an RsaPublicKey.
+  static util::StatusOr<bssl::UniquePtr<RSA>> BoringSslRsaFromRsaPublicKey(
+      const RsaPublicKey &key);
+
   // Returns BoringSSL's AES CTR EVP_CIPHER for the key size.
-  static const EVP_CIPHER* GetAesCtrCipherForKeySize(uint32_t size_in_bytes);
+  static const EVP_CIPHER *GetAesCtrCipherForKeySize(uint32_t size_in_bytes);
+
+  // Returns BoringSSL's AES GCM EVP_CIPHER for the key size.
+  static const EVP_CIPHER *GetAesGcmCipherForKeySize(uint32_t size_in_bytes);
+
+  // Returns BoringSSL's AES GCM EVP_AEAD for the key size.
+  static const EVP_AEAD *GetAesGcmAeadForKeySize(uint32_t size_in_bytes);
 };
 
 namespace boringssl {

@@ -16,6 +16,7 @@
 
 #include "tink/signature/public_key_sign_wrapper.h"
 #include "gtest/gtest.h"
+#include "absl/memory/memory.h"
 #include "tink/crypto_format.h"
 #include "tink/primitive_set.h"
 #include "tink/public_key_sign.h"
@@ -26,7 +27,7 @@
 using ::crypto::tink::test::DummyPublicKeySign;
 using ::crypto::tink::test::DummyPublicKeyVerify;
 using ::crypto::tink::test::IsOk;
-using ::google::crypto::tink::Keyset;
+using ::google::crypto::tink::KeysetInfo;
 using ::google::crypto::tink::KeyStatusType;
 using ::google::crypto::tink::OutputPrefixType;
 
@@ -63,26 +64,26 @@ TEST_F(PublicKeySignSetWrapperTest, testBasic) {
   }
 
   { // Correct pk_sign_set;
-    Keyset::Key* key;
-    Keyset keyset;
+    KeysetInfo::KeyInfo* key_info;
+    KeysetInfo keyset_info;
 
     uint32_t key_id_0 = 1234543;
-    key = keyset.add_key();
-    key->set_output_prefix_type(OutputPrefixType::TINK);
-    key->set_key_id(key_id_0);
-    key->set_status(KeyStatusType::ENABLED);
+    key_info = keyset_info.add_key_info();
+    key_info->set_output_prefix_type(OutputPrefixType::TINK);
+    key_info->set_key_id(key_id_0);
+    key_info->set_status(KeyStatusType::ENABLED);
 
     uint32_t key_id_1 = 726329;
-    key = keyset.add_key();
-    key->set_output_prefix_type(OutputPrefixType::LEGACY);
-    key->set_key_id(key_id_1);
-    key->set_status(KeyStatusType::ENABLED);
+    key_info = keyset_info.add_key_info();
+    key_info->set_output_prefix_type(OutputPrefixType::LEGACY);
+    key_info->set_key_id(key_id_1);
+    key_info->set_status(KeyStatusType::ENABLED);
 
     uint32_t key_id_2 = 7213743;
-    key = keyset.add_key();
-    key->set_output_prefix_type(OutputPrefixType::RAW);
-    key->set_key_id(key_id_2);
-    key->set_status(KeyStatusType::ENABLED);
+    key_info = keyset_info.add_key_info();
+    key_info->set_output_prefix_type(OutputPrefixType::RAW);
+    key_info->set_key_id(key_id_2);
+    key_info->set_status(KeyStatusType::ENABLED);
 
     std::string signature_name_0 = "signature_0";
     std::string signature_name_1 = "signature_1";
@@ -93,17 +94,17 @@ TEST_F(PublicKeySignSetWrapperTest, testBasic) {
     std::unique_ptr<PublicKeySign> pk_sign(
         new DummyPublicKeySign(signature_name_0));
     auto entry_result =
-        pk_sign_set->AddPrimitive(std::move(pk_sign), keyset.key(0));
+        pk_sign_set->AddPrimitive(std::move(pk_sign), keyset_info.key_info(0));
     ASSERT_TRUE(entry_result.ok());
 
-    pk_sign.reset(new DummyPublicKeySign(signature_name_1));
+    pk_sign = absl::make_unique<DummyPublicKeySign>(signature_name_1);
     entry_result =
-        pk_sign_set->AddPrimitive(std::move(pk_sign), keyset.key(1));
+        pk_sign_set->AddPrimitive(std::move(pk_sign), keyset_info.key_info(1));
     ASSERT_TRUE(entry_result.ok());
 
-    pk_sign.reset(new DummyPublicKeySign(signature_name_2));
+    pk_sign = absl::make_unique<DummyPublicKeySign>(signature_name_2);
     entry_result =
-        pk_sign_set->AddPrimitive(std::move(pk_sign), keyset.key(2));
+        pk_sign_set->AddPrimitive(std::move(pk_sign), keyset_info.key_info(2));
     ASSERT_TRUE(entry_result.ok());
 
     // The last key is the primary.
@@ -126,7 +127,7 @@ TEST_F(PublicKeySignSetWrapperTest, testBasic) {
 
 TEST_F(PublicKeySignSetWrapperTest, testLegacySignatures) {
     // Prepare a set for the wrapper.
-    Keyset::Key key;
+    KeysetInfo::KeyInfo key;
     uint32_t key_id = 1234543;
     key.set_output_prefix_type(OutputPrefixType::LEGACY);
     key.set_key_id(key_id);
@@ -156,7 +157,8 @@ TEST_F(PublicKeySignSetWrapperTest, testLegacySignatures) {
     // Try verifying on raw PublicKeyVerify-primitive using original data.
     std::unique_ptr<PublicKeyVerify> raw_pk_verify(
         new DummyPublicKeyVerify(signature_name));
-    std::string raw_signature = signature.substr(CryptoFormat::kNonRawPrefixSize);
+    std::string raw_signature =
+        signature.substr(CryptoFormat::kNonRawPrefixSize);
     auto status = raw_pk_verify->Verify(raw_signature, data);
     EXPECT_FALSE(status.ok());
     EXPECT_EQ(util::error::INVALID_ARGUMENT, status.error_code());

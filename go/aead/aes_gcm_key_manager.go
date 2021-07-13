@@ -1,3 +1,5 @@
+// Copyright 2018 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -18,12 +20,12 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/google/tink/go/keyset"
+	"github.com/google/tink/go/aead/subtle"
 	"github.com/google/tink/go/core/registry"
-	"github.com/google/tink/go/subtle/aead"
+	"github.com/google/tink/go/keyset"
 	"github.com/google/tink/go/subtle/random"
-	gcmpb "github.com/google/tink/proto/aes_gcm_go_proto"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	gcmpb "github.com/google/tink/go/proto/aes_gcm_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 const (
@@ -59,7 +61,7 @@ func (km *aesGCMKeyManager) Primitive(serializedKey []byte) (interface{}, error)
 	if err := km.validateKey(key); err != nil {
 		return nil, err
 	}
-	ret, err := aead.NewAESGCM(key.KeyValue)
+	ret, err := subtle.NewAESGCM(key.KeyValue)
 	if err != nil {
 		return nil, fmt.Errorf("aes_gcm_key_manager: cannot create new primitive: %s", err)
 	}
@@ -121,7 +123,7 @@ func (km *aesGCMKeyManager) validateKey(key *gcmpb.AesGcmKey) error {
 		return fmt.Errorf("aes_gcm_key_manager: %s", err)
 	}
 	keySize := uint32(len(key.KeyValue))
-	if err := aead.ValidateAESKeySize(keySize); err != nil {
+	if err := subtle.ValidateAESKeySize(keySize); err != nil {
 		return fmt.Errorf("aes_gcm_key_manager: %s", err)
 	}
 	return nil
@@ -129,7 +131,7 @@ func (km *aesGCMKeyManager) validateKey(key *gcmpb.AesGcmKey) error {
 
 // validateKeyFormat validates the given AESGCMKeyFormat.
 func (km *aesGCMKeyManager) validateKeyFormat(format *gcmpb.AesGcmKeyFormat) error {
-	if err := aead.ValidateAESKeySize(format.KeySize); err != nil {
+	if err := subtle.ValidateAESKeySize(format.KeySize); err != nil {
 		return fmt.Errorf("aes_gcm_key_manager: %s", err)
 	}
 	return nil

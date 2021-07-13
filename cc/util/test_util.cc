@@ -20,25 +20,36 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <unistd.h>
+
+#include <cmath>
+#include <cstdint>
 #include <cstdlib>
 
 #include "absl/memory/memory.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
+#include "tink/aead/aes_ctr_hmac_aead_key_manager.h"
 #include "tink/aead/aes_gcm_key_manager.h"
+#include "tink/aead/xchacha20_poly1305_key_manager.h"
 #include "tink/cleartext_keyset_handle.h"
+#include "tink/daead/aes_siv_key_manager.h"
 #include "tink/keyset_handle.h"
-#include "tink/subtle/random.h"
 #include "tink/subtle/common_enums.h"
+#include "tink/subtle/random.h"
 #include "tink/subtle/subtle_util_boringssl.h"
 #include "tink/util/enums.h"
 #include "tink/util/protobuf_helper.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
-#include "proto/aes_gcm.pb.h"
+#include "proto/aes_ctr_hmac_aead.pb.h"
+#include "proto/aes_siv.pb.h"
 #include "proto/common.pb.h"
 #include "proto/ecdsa.pb.h"
 #include "proto/ecies_aead_hkdf.pb.h"
 #include "proto/ed25519.pb.h"
 #include "proto/tink.pb.h"
+#include "proto/xchacha20_poly1305.pb.h"
 
 using crypto::tink::util::Enums;
 using crypto::tink::util::Status;
@@ -55,8 +66,8 @@ namespace crypto {
 namespace tink {
 namespace test {
 
-int GetTestFileDescriptor(
-    absl::string_view filename, int size, std::string* file_contents) {
+int GetTestFileDescriptor(absl::string_view filename, int size,
+                          std::string* file_contents) {
   (*file_contents) = subtle::Random::GetRandomBytes(size);
   return GetTestFileDescriptor(filename, *file_contents);
 }
@@ -168,7 +179,7 @@ std::string HexEncode(absl::string_view bytes) {
 }
 
 #if defined(PLATFORM_GOOGLE)
-std::string TmpDir() { return FLAGS_test_tmpdir; }
+string TmpDir() { return FLAGS_test_tmpdir; }
 #else
 std::string TmpDir() {
   // 'bazel test' sets TEST_TMPDIR
@@ -210,35 +221,29 @@ void AddKey(const std::string& key_type, uint32_t key_id,
   AddKeyData(key_data, key_id, output_prefix, key_status, keyset);
 }
 
-void AddTinkKey(
-    const std::string& key_type,
-    uint32_t key_id,
-    const portable_proto::MessageLite& key,
-    google::crypto::tink::KeyStatusType key_status,
-    google::crypto::tink::KeyData::KeyMaterialType material_type,
-    google::crypto::tink::Keyset* keyset) {
+void AddTinkKey(const std::string& key_type, uint32_t key_id,
+                const portable_proto::MessageLite& key,
+                google::crypto::tink::KeyStatusType key_status,
+                google::crypto::tink::KeyData::KeyMaterialType material_type,
+                google::crypto::tink::Keyset* keyset) {
   AddKey(key_type, key_id, key, OutputPrefixType::TINK,
          key_status, material_type, keyset);
 }
 
-void AddLegacyKey(
-    const std::string& key_type,
-    uint32_t key_id,
-    const portable_proto::MessageLite& key,
-    google::crypto::tink::KeyStatusType key_status,
-    google::crypto::tink::KeyData::KeyMaterialType material_type,
-    google::crypto::tink::Keyset* keyset) {
+void AddLegacyKey(const std::string& key_type, uint32_t key_id,
+                  const portable_proto::MessageLite& key,
+                  google::crypto::tink::KeyStatusType key_status,
+                  google::crypto::tink::KeyData::KeyMaterialType material_type,
+                  google::crypto::tink::Keyset* keyset) {
   AddKey(key_type, key_id, key, OutputPrefixType::LEGACY,
          key_status, material_type, keyset);
 }
 
-void AddRawKey(
-    const std::string& key_type,
-    uint32_t key_id,
-    const portable_proto::MessageLite& key,
-    google::crypto::tink::KeyStatusType key_status,
-    google::crypto::tink::KeyData::KeyMaterialType material_type,
-    google::crypto::tink::Keyset* keyset) {
+void AddRawKey(const std::string& key_type, uint32_t key_id,
+               const portable_proto::MessageLite& key,
+               google::crypto::tink::KeyStatusType key_status,
+               google::crypto::tink::KeyData::KeyMaterialType material_type,
+               google::crypto::tink::Keyset* keyset) {
   AddKey(key_type, key_id, key, OutputPrefixType::RAW,
          key_status, material_type, keyset);
 }
@@ -255,16 +260,16 @@ EciesAeadHkdfPrivateKey GetEciesAesGcmHkdfTestKey(
       aes_gcm_key_size);
 }
 
-EciesAeadHkdfPrivateKey GetEciesAesGcmHkdfTestKey(
+EciesAeadHkdfPrivateKey GetEciesAeadHkdfTestKey(
     google::crypto::tink::EllipticCurveType curve_type,
     google::crypto::tink::EcPointFormat ec_point_format,
-    google::crypto::tink::HashType hash_type,
-    uint32_t aes_gcm_key_size) {
+    google::crypto::tink::HashType hash_type) {
   auto test_key = subtle::SubtleUtilBoringSSL::GetNewEcKey(
       Enums::ProtoToSubtle(curve_type)).ValueOrDie();
   EciesAeadHkdfPrivateKey ecies_key;
   ecies_key.set_version(0);
-  ecies_key.set_key_value(test_key.priv);
+  ecies_key.set_key_value(
+      std::string(util::SecretDataAsStringView(test_key.priv)));
   auto public_key = ecies_key.mutable_public_key();
   public_key->set_version(0);
   public_key->set_x(test_key.pub_x);
@@ -274,11 +279,90 @@ EciesAeadHkdfPrivateKey GetEciesAesGcmHkdfTestKey(
   params->mutable_kem_params()->set_curve_type(curve_type);
   params->mutable_kem_params()->set_hkdf_hash_type(hash_type);
 
+  return ecies_key;
+}
+
+EciesAeadHkdfPrivateKey GetEciesAesGcmHkdfTestKey(
+    google::crypto::tink::EllipticCurveType curve_type,
+    google::crypto::tink::EcPointFormat ec_point_format,
+    google::crypto::tink::HashType hash_type, uint32_t aes_gcm_key_size) {
+  auto ecies_key =
+      GetEciesAeadHkdfTestKey(curve_type, ec_point_format, hash_type);
+  auto params = ecies_key.mutable_public_key()->mutable_params();
+
   AesGcmKeyFormat key_format;
   key_format.set_key_size(aes_gcm_key_size);
   auto aead_dem = params->mutable_dem_params()->mutable_aead_dem();
   std::unique_ptr<AesGcmKeyManager> key_manager(new AesGcmKeyManager());
   std::string dem_key_type = key_manager->get_key_type();
+  aead_dem->set_type_url(dem_key_type);
+  aead_dem->set_value(key_format.SerializeAsString());
+  return ecies_key;
+}
+
+EciesAeadHkdfPrivateKey GetEciesAesCtrHmacHkdfTestKey(
+    google::crypto::tink::EllipticCurveType curve_type,
+    google::crypto::tink::EcPointFormat ec_point_format,
+    google::crypto::tink::HashType hash_type, uint32_t aes_ctr_key_size,
+    uint32_t aes_ctr_iv_size, google::crypto::tink::HashType hmac_hash_type,
+    uint32_t hmac_tag_size, uint32_t hmac_key_size) {
+  auto ecies_key =
+      GetEciesAeadHkdfTestKey(curve_type, ec_point_format, hash_type);
+
+  google::crypto::tink::AesCtrHmacAeadKeyFormat key_format;
+  auto aes_ctr_key_format = key_format.mutable_aes_ctr_key_format();
+  auto aes_ctr_params = aes_ctr_key_format->mutable_params();
+  aes_ctr_params->set_iv_size(aes_ctr_iv_size);
+  aes_ctr_key_format->set_key_size(aes_ctr_key_size);
+
+  auto hmac_key_format = key_format.mutable_hmac_key_format();
+  auto hmac_params = hmac_key_format->mutable_params();
+  hmac_params->set_hash(hmac_hash_type);
+  hmac_params->set_tag_size(hmac_tag_size);
+  hmac_key_format->set_key_size(hmac_key_size);
+
+  auto params = ecies_key.mutable_public_key()->mutable_params();
+  auto aead_dem = params->mutable_dem_params()->mutable_aead_dem();
+
+  std::unique_ptr<AesCtrHmacAeadKeyManager> key_manager(
+      new AesCtrHmacAeadKeyManager());
+  std::string dem_key_type = key_manager->get_key_type();
+  aead_dem->set_type_url(dem_key_type);
+  aead_dem->set_value(key_format.SerializeAsString());
+  return ecies_key;
+}
+
+EciesAeadHkdfPrivateKey GetEciesXChaCha20Poly1305HkdfTestKey(
+    google::crypto::tink::EllipticCurveType curve_type,
+    google::crypto::tink::EcPointFormat ec_point_format,
+    google::crypto::tink::HashType hash_type) {
+  auto ecies_key =
+      GetEciesAeadHkdfTestKey(curve_type, ec_point_format, hash_type);
+  auto params = ecies_key.mutable_public_key()->mutable_params();
+
+  google::crypto::tink::XChaCha20Poly1305KeyFormat key_format;
+  auto aead_dem = params->mutable_dem_params()->mutable_aead_dem();
+  std::unique_ptr<XChaCha20Poly1305KeyManager> key_manager(
+      new XChaCha20Poly1305KeyManager());
+  std::string dem_key_type = key_manager->get_key_type();
+  aead_dem->set_type_url(dem_key_type);
+  aead_dem->set_value(key_format.SerializeAsString());
+  return ecies_key;
+}
+
+google::crypto::tink::EciesAeadHkdfPrivateKey GetEciesAesSivHkdfTestKey(
+    google::crypto::tink::EllipticCurveType curve_type,
+    google::crypto::tink::EcPointFormat ec_point_format,
+    google::crypto::tink::HashType hash_type) {
+  auto ecies_key =
+      GetEciesAeadHkdfTestKey(curve_type, ec_point_format, hash_type);
+  auto params = ecies_key.mutable_public_key()->mutable_params();
+
+  google::crypto::tink::AesSivKeyFormat key_format;
+  key_format.set_key_size(64);
+  auto aead_dem = params->mutable_dem_params()->mutable_aead_dem();
+  AesSivKeyManager key_manager;
+  std::string dem_key_type = key_manager.get_key_type();
   aead_dem->set_type_url(dem_key_type);
   aead_dem->set_value(key_format.SerializeAsString());
   return ecies_key;
@@ -300,7 +384,8 @@ EcdsaPrivateKey GetEcdsaTestPrivateKey(
       Enums::ProtoToSubtle(curve_type)).ValueOrDie();
   EcdsaPrivateKey ecdsa_key;
   ecdsa_key.set_version(0);
-  ecdsa_key.set_key_value(test_key.priv);
+  ecdsa_key.set_key_value(
+      std::string(util::SecretDataAsStringView(test_key.priv)));
   auto public_key = ecdsa_key.mutable_public_key();
   public_key->set_version(0);
   public_key->set_x(test_key.pub_x);
@@ -323,6 +408,72 @@ Ed25519PrivateKey GetEd25519TestPrivateKey() {
   public_key->set_key_value(test_key->public_key);
 
   return ed25519_key;
+}
+
+util::Status ZTestUniformString(absl::string_view bytes) {
+  double expected = bytes.size() * 8.0 / 2.0;
+  double stddev = std::sqrt(static_cast<double>(bytes.size()) * 8.0 / 4.0);
+  uint64_t num_set_bits = 0;
+  for (uint8_t byte : bytes) {
+    // Counting the number of bits set in byte:
+    while (byte != 0) {
+      num_set_bits++;
+      byte = byte & (byte - 1);
+    }
+  }
+  // Check that the number of bits is within 10 stddevs.
+  if (abs(static_cast<double>(num_set_bits) - expected) < 10.0 * stddev) {
+    return util::OkStatus();
+  }
+  return util::Status(
+      util::error::INTERNAL,
+      absl::StrCat("Z test for uniformly distributed variable out of bounds; "
+                   "Actual number of set bits was ",
+                   num_set_bits, " expected was ", expected,
+                   " 10 * standard deviation is 10 * ", stddev, " = ",
+                   10.0 * stddev));
+}
+
+std::string Rotate(absl::string_view bytes) {
+  std::string result(bytes.size(), '\0');
+  for (int i = 0; i < bytes.size(); i++) {
+    result[i] = (static_cast<uint8_t>(bytes[i]) >> 1) |
+                (bytes[(i == 0 ? bytes.size() : i) - 1] << 7);
+  }
+  return result;
+}
+
+util::Status ZTestCrosscorrelationUniformStrings(absl::string_view bytes1,
+                                                 absl::string_view bytes2) {
+  if (bytes1.size() != bytes2.size()) {
+    return util::Status(util::error::INVALID_ARGUMENT,
+                        "Strings are not of equal length");
+  }
+  std::string crossed(bytes1.size(), '\0');
+  for (int i = 0; i < bytes1.size(); i++) {
+    crossed[i] = bytes1[i] ^ bytes2[i];
+  }
+  return ZTestUniformString(crossed);
+}
+
+util::Status ZTestAutocorrelationUniformString(absl::string_view bytes) {
+  std::string rotated(bytes);
+  std::vector<int> violations;
+  for (int i = 1; i < bytes.size() * 8; i++) {
+    rotated = Rotate(rotated);
+    auto status = ZTestCrosscorrelationUniformStrings(bytes, rotated);
+    if (!status.ok()) {
+      violations.push_back(i);
+    }
+  }
+  if (violations.empty()) {
+    return util::OkStatus();
+  }
+  return util::Status(
+      util::error::INTERNAL,
+      absl::StrCat("Autocorrelation exceeded 10 standard deviation at ",
+                   violations.size(),
+                   " indices: ", absl::StrJoin(violations, ", ")));
 }
 
 }  // namespace test

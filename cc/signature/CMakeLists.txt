@@ -94,20 +94,20 @@ tink_cc_library(
     ecdsa_sign_key_manager.h
   DEPS
     tink::signature::ecdsa_verify_key_manager
-    tink::core::key_manager
-    tink::core::key_manager_base
+    tink::config::tink_fips
+    tink::core::private_key_type_manager
     tink::core::public_key_sign
-    tink::core::registry
     tink::subtle::ecdsa_sign_boringssl
     tink::subtle::subtle_util_boringssl
+    tink::util::constants
     tink::util::enums
     tink::util::errors
+    tink::util::input_stream_util
     tink::util::protobuf_helper
+    tink::util::secret_data
     tink::util::status
     tink::util::statusor
-    tink::proto::common_cc_proto
     tink::proto::ecdsa_cc_proto
-    tink::proto::tink_cc_proto
     absl::memory
     absl::strings
 )
@@ -118,20 +118,19 @@ tink_cc_library(
     ecdsa_verify_key_manager.cc
     ecdsa_verify_key_manager.h
   DEPS
-    tink::core::key_manager
-    tink::core::key_manager_base
+    tink::core::key_type_manager
     tink::core::public_key_verify
-    tink::core::registry
     tink::subtle::ecdsa_verify_boringssl
     tink::subtle::subtle_util_boringssl
+    tink::util::constants
     tink::util::enums
     tink::util::errors
     tink::util::protobuf_helper
     tink::util::status
     tink::util::statusor
-    tink::proto::common_cc_proto
     tink::proto::ecdsa_cc_proto
-    tink::proto::tink_cc_proto
+    absl::memory
+    absl::strings
 )
 
 tink_cc_library(
@@ -141,20 +140,20 @@ tink_cc_library(
     ed25519_sign_key_manager.h
   DEPS
     tink::signature::ed25519_verify_key_manager
-    tink::core::key_manager
-    tink::core::key_manager_base
+    tink::core::private_key_type_manager
     tink::core::public_key_sign
     tink::subtle::ed25519_sign_boringssl
     tink::subtle::subtle_util_boringssl
+    tink::util::constants
     tink::util::enums
     tink::util::errors
+    tink::util::input_stream_util
     tink::util::protobuf_helper
+    tink::util::secret_data
     tink::util::status
     tink::util::statusor
     tink::util::validation
     tink::proto::ed25519_cc_proto
-    tink::proto::empty_cc_proto
-    tink::proto::tink_cc_proto
     absl::memory
     absl::strings
 )
@@ -165,17 +164,18 @@ tink_cc_library(
     ed25519_verify_key_manager.cc
     ed25519_verify_key_manager.h
   DEPS
-    tink::core::key_manager
-    tink::core::key_manager_base
+    tink::core::key_type_manager
     tink::core::public_key_verify
     tink::subtle::ed25519_verify_boringssl
     tink::subtle::subtle_util_boringssl
+    tink::util::constants
     tink::util::errors
     tink::util::protobuf_helper
     tink::util::status
     tink::util::statusor
     tink::util::validation
     tink::proto::ed25519_cc_proto
+    absl::memory
     absl::strings
 )
 
@@ -198,20 +198,20 @@ tink_cc_library(
   DEPS
     tink::signature::rsa_ssa_pkcs1_verify_key_manager
     tink::signature::sig_util
-    tink::core::key_manager
-    tink::core::key_manager_base
+    tink::core::private_key_type_manager
     tink::core::public_key_sign
-    tink::core::registry
+    tink::core::public_key_verify
     tink::subtle::rsa_ssa_pkcs1_sign_boringssl
     tink::subtle::subtle_util_boringssl
+    tink::util::constants
     tink::util::enums
     tink::util::errors
     tink::util::protobuf_helper
+    tink::util::secret_data
     tink::util::status
     tink::util::statusor
-    tink::proto::common_cc_proto
+    tink::util::validation
     tink::proto::rsa_ssa_pkcs1_cc_proto
-    tink::proto::tink_cc_proto
     absl::memory
     absl::strings
 )
@@ -222,20 +222,20 @@ tink_cc_library(
     rsa_ssa_pkcs1_verify_key_manager.cc
     rsa_ssa_pkcs1_verify_key_manager.h
   DEPS
-    tink::core::key_manager
-    tink::core::key_manager_base
+    tink::core::key_type_manager
     tink::core::public_key_verify
-    tink::core::registry
     tink::subtle::rsa_ssa_pkcs1_verify_boringssl
     tink::subtle::subtle_util_boringssl
+    tink::util::constants
     tink::util::enums
     tink::util::errors
     tink::util::protobuf_helper
     tink::util::status
     tink::util::statusor
-    tink::proto::common_cc_proto
+    tink::util::validation
     tink::proto::rsa_ssa_pkcs1_cc_proto
-    tink::proto::tink_cc_proto
+    absl::memory
+    absl::strings
 )
 
 tink_cc_library(
@@ -246,15 +246,16 @@ tink_cc_library(
   DEPS
     tink::signature::rsa_ssa_pss_verify_key_manager
     tink::signature::sig_util
-    tink::core::key_manager
-    tink::core::key_manager_base
+    tink::core::key_type_manager
+    tink::core::private_key_type_manager
     tink::core::public_key_sign
-    tink::core::registry
     tink::subtle::rsa_ssa_pss_sign_boringssl
     tink::subtle::subtle_util_boringssl
+    tink::util::constants
     tink::util::enums
     tink::util::errors
     tink::util::protobuf_helper
+    tink::util::secret_data
     tink::util::status
     tink::util::statusor
     tink::proto::common_cc_proto
@@ -271,19 +272,22 @@ tink_cc_library(
     rsa_ssa_pss_verify_key_manager.h
   DEPS
     tink::core::key_manager
-    tink::core::key_manager_base
     tink::core::public_key_verify
-    tink::core::registry
+    tink::core::public_key_sign
     tink::subtle::rsa_ssa_pss_verify_boringssl
     tink::subtle::subtle_util_boringssl
+    tink::util::constants
     tink::util::enums
     tink::util::errors
     tink::util::protobuf_helper
+    tink::util::secret_data
     tink::util::status
     tink::util::statusor
     tink::proto::common_cc_proto
     tink::proto::rsa_ssa_pss_cc_proto
     tink::proto::tink_cc_proto
+    absl::memory
+    absl::strings
 )
 
 tink_cc_library(
@@ -303,11 +307,37 @@ tink_cc_library(
     tink::signature::public_key_sign_wrapper
     tink::signature::public_key_verify_wrapper
     tink::config::config_util
+    tink::config::tink_fips
     tink::core::registry
     tink::util::status
     tink::proto::config_cc_proto
     absl::base
     absl::memory
+)
+
+tink_cc_library(
+  NAME signature_pem_keyset_reader
+  SRCS
+    signature_pem_keyset_reader.cc
+    signature_pem_keyset_reader.h
+  DEPS
+    tink::signature::rsa_ssa_pkcs1_sign_key_manager
+    tink::signature::rsa_ssa_pkcs1_verify_key_manager
+    tink::signature::rsa_ssa_pss_sign_key_manager
+    tink::signature::rsa_ssa_pss_verify_key_manager
+    tink::subtle::pem_parser_boringssl
+    tink::subtle::subtle_util_boringssl
+    tink::util::enums
+    tink::util::keyset_util
+    tink::util::secret_data
+    tink::util::status
+    tink::util::statusor
+    tink::proto::common_cc_proto
+    tink::proto::rsa_ssa_pkcs1_cc_proto
+    tink::proto::rsa_ssa_pss_cc_proto
+    tink::proto::tink_cc_proto
+    absl::memory
+    absl::strings
 )
 
 # tests
@@ -357,6 +387,7 @@ tink_cc_test(
     tink::util::test_matchers
     tink::util::test_util
     tink::proto::tink_cc_proto
+    absl::memory
 )
 
 tink_cc_test(
@@ -383,16 +414,18 @@ tink_cc_test(
   DEPS
     tink::signature::ecdsa_sign_key_manager
     tink::signature::ecdsa_verify_key_manager
-    tink::core::config
     tink::core::public_key_sign
     tink::core::public_key_verify
-    tink::core::registry
+    tink::subtle::ecdsa_sign_boringssl
+    tink::subtle::subtle_util_boringssl
+    tink::util::enums
+    tink::util::secret_data
     tink::util::status
+    tink::util::statusor
+    tink::util::test_matchers
     tink::util::test_util
-    tink::proto::aes_eax_cc_proto
-    tink::proto::common_cc_proto
     tink::proto::ecdsa_cc_proto
-    tink::proto::tink_cc_proto
+    gmock
 )
 
 tink_cc_test(
@@ -404,50 +437,54 @@ tink_cc_test(
     tink::core::public_key_sign
     tink::core::public_key_verify
     tink::core::registry
+    tink::subtle::ed25519_sign_boringssl
+    tink::util::enums
+    tink::util::secret_data
     tink::util::status
     tink::util::statusor
+    tink::util::test_matchers
     tink::util::test_util
-    tink::proto::aes_eax_cc_proto
-    tink::proto::common_cc_proto
     tink::proto::ed25519_cc_proto
-    tink::proto::empty_cc_proto
-    tink::proto::tink_cc_proto
+    gmock
 )
 
 tink_cc_test(
   NAME rsa_ssa_pkcs1_verify_key_manager_test
   SRCS rsa_ssa_pkcs1_verify_key_manager_test.cc
   DEPS
+    tink::signature::rsa_ssa_pkcs1_sign_key_manager
     tink::signature::rsa_ssa_pkcs1_verify_key_manager
-    tink::core::config
     tink::core::public_key_sign
     tink::core::public_key_verify
-    tink::core::registry
+    tink::util::secret_data
     tink::util::status
+    tink::util::statusor
     tink::util::test_util
-    tink::proto::aes_eax_cc_proto
-    tink::proto::common_cc_proto
+    tink::util::test_matchers
     tink::proto::rsa_ssa_pkcs1_cc_proto
     tink::proto::tink_cc_proto
     absl::strings
+    crypto
+    gmock
 )
 
 tink_cc_test(
   NAME rsa_ssa_pss_verify_key_manager_test
   SRCS rsa_ssa_pss_verify_key_manager_test.cc
   DEPS
+    tink::signature::rsa_ssa_pss_sign_key_manager
     tink::signature::rsa_ssa_pss_verify_key_manager
-    tink::core::config
     tink::core::public_key_sign
     tink::core::public_key_verify
-    tink::core::registry
+    tink::util::secret_data
     tink::util::status
+    tink::util::statusor
     tink::util::test_util
-    tink::proto::aes_eax_cc_proto
-    tink::proto::common_cc_proto
+    tink::util::test_matchers
     tink::proto::rsa_ssa_pss_cc_proto
-    tink::proto::tink_cc_proto
     absl::strings
+    crypto
+    gmock
 )
 
 tink_cc_test(
@@ -457,17 +494,18 @@ tink_cc_test(
     tink::signature::ecdsa_sign_key_manager
     tink::signature::ecdsa_verify_key_manager
     tink::signature::signature_key_templates
-    tink::core::config
     tink::core::public_key_sign
-    tink::core::registry
-    tink::aead::aead_key_templates
-    tink::aead::aes_gcm_key_manager
+    tink::core::public_key_verify
+    tink::subtle::ecdsa_verify_boringssl
+    tink::subtle::subtle_util_boringssl
+    tink::util::enums
+    tink::util::istream_input_stream
     tink::util::status
+    tink::util::statusor
+    tink::util::test_matchers
     tink::util::test_util
-    tink::proto::aes_eax_cc_proto
-    tink::proto::common_cc_proto
     tink::proto::ecdsa_cc_proto
-    tink::proto::tink_cc_proto
+    gmock
 )
 
 tink_cc_test(
@@ -476,20 +514,19 @@ tink_cc_test(
   DEPS
     tink::signature::ed25519_sign_key_manager
     tink::signature::ed25519_verify_key_manager
-    tink::signature::signature_key_templates
     tink::core::public_key_sign
     tink::core::registry
-    tink::aead::aead_key_templates
-    tink::aead::aes_gcm_key_manager
+    tink::subtle::ed25519_verify_boringssl
+    tink::util::enums
+    tink::util::istream_input_stream
     tink::util::protobuf_helper
     tink::util::status
     tink::util::statusor
+    tink::util::test_matchers
     tink::util::test_util
-    tink::proto::aes_eax_cc_proto
-    tink::proto::common_cc_proto
     tink::proto::ed25519_cc_proto
-    tink::proto::empty_cc_proto
-    tink::proto::tink_cc_proto
+    absl::flat_hash_set
+    gmock
 )
 
 tink_cc_test(
@@ -498,20 +535,20 @@ tink_cc_test(
   DEPS
     tink::signature::rsa_ssa_pkcs1_sign_key_manager
     tink::signature::rsa_ssa_pkcs1_verify_key_manager
-    tink::signature::signature_key_templates
-    tink::core::config
     tink::core::public_key_sign
-    tink::core::registry
-    tink::aead::aead_key_templates
-    tink::aead::aes_gcm_key_manager
+    tink::core::public_key_verify
+    tink::subtle::rsa_ssa_pkcs1_verify_boringssl
     tink::subtle::subtle_util_boringssl
+    tink::util::secret_data
     tink::util::status
+    tink::util::statusor
+    tink::util::test_matchers
     tink::util::test_util
-    tink::proto::aes_eax_cc_proto
-    tink::proto::common_cc_proto
     tink::proto::rsa_ssa_pkcs1_cc_proto
     tink::proto::tink_cc_proto
     crypto
+    gmock
+    absl::flat_hash_set
 )
 
 tink_cc_test(
@@ -521,19 +558,18 @@ tink_cc_test(
     tink::signature::rsa_ssa_pss_sign_key_manager
     tink::signature::rsa_ssa_pss_verify_key_manager
     tink::signature::signature_key_templates
-    tink::core::config
     tink::core::public_key_sign
-    tink::core::registry
-    tink::aead::aead_key_templates
-    tink::aead::aes_gcm_key_manager
+    tink::subtle::rsa_ssa_pss_verify_boringssl
     tink::subtle::subtle_util_boringssl
+    tink::util::secret_data
     tink::util::status
+    tink::util::statusor
+    tink::util::test_matchers
     tink::util::test_util
-    tink::proto::aes_eax_cc_proto
-    tink::proto::common_cc_proto
     tink::proto::rsa_ssa_pss_cc_proto
-    tink::proto::tink_cc_proto
+    absl::flat_hash_set
     crypto
+    gmock
 )
 
 tink_cc_test(
@@ -544,6 +580,7 @@ tink_cc_test(
     tink::signature::rsa_ssa_pss_verify_key_manager
     tink::signature::signature_config
     tink::signature::signature_key_templates
+    tink::config::tink_fips
     tink::core::config
     tink::core::keyset_handle
     tink::core::public_key_sign
@@ -553,6 +590,7 @@ tink_cc_test(
     tink::util::test_matchers
     tink::util::test_util
     absl::memory
+    crypto
 )
 
 tink_cc_test(
@@ -573,4 +611,26 @@ tink_cc_test(
     tink::proto::rsa_ssa_pss_cc_proto
     tink::proto::tink_cc_proto
     crypto
+)
+
+tink_cc_test(
+  NAME signature_pem_keyset_reader_test
+  SRCS signature_pem_keyset_reader_test.cc
+  DEPS
+    tink::signature::signature_pem_keyset_reader
+    tink::signature::rsa_ssa_pss_sign_key_manager
+    tink::signature::rsa_ssa_pss_verify_key_manager
+    tink::signature::signature_config
+    tink::subtle::pem_parser_boringssl
+    tink::subtle::subtle_util_boringssl
+    tink::util::enums
+    tink::util::keyset_util
+    tink::util::secret_data
+    tink::util::status
+    tink::util::test_util
+    tink::proto::common_cc_proto
+    tink::proto::rsa_ssa_pss_cc_proto
+    tink::proto::tink_cc_proto
+    absl::strings
+    gmock
 )

@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -12,18 +14,20 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-// Package registry provides a container that for each supported key type holds a corresponding KeyManager
-// object, which can generate new keys or instantiate the primitive corresponding to given key.
+// Package registry provides a container that for each supported key type holds
+// a corresponding KeyManager object, which can generate new keys or
+// instantiate the primitive corresponding to given key.
 //
-// Registry is initialized at startup, and is later used to instantiate primitives for given keys
-// or keysets. Keeping KeyManagers for all primitives in a single Registry (rather than having a
-// separate KeyManager per primitive) enables modular construction of compound primitives from
-// "simple" ones, e.g., AES-CTR-HMAC AEAD encryption uses IND-CPA encryption and a MAC.
+// Registry is initialized at startup, and is later used to instantiate
+// primitives for given keys or keysets. Keeping KeyManagers for all primitives
+// in a single Registry (rather than having a separate KeyManager per
+// primitive) enables modular construction of compound primitives from "simple"
+// ones, e.g., AES-CTR-HMAC AEAD encryption uses IND-CPA encryption and a MAC.
 //
-// Note that regular users will usually not work directly with Registry, but rather
-// via primitive factories, which in the background query the Registry for specific
-// KeyManagers. Registry is public though, to enable configurations with custom
-// primitives and KeyManagers.
+// Note that regular users will usually not work directly with Registry, but
+// rather via primitive factories, which in the background query the Registry
+// for specific KeyManagers. Registry is public though, to enable
+// configurations with custom primitives and KeyManagers.
 package registry
 
 import (
@@ -31,7 +35,7 @@ import (
 	"sync"
 
 	"github.com/golang/protobuf/proto"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 var (
@@ -127,4 +131,11 @@ func GetKMSClient(keyURI string) (KMSClient, error) {
 		}
 	}
 	return nil, fmt.Errorf("KMS client supporting %s not found", keyURI)
+}
+
+// ClearKMSClients removes all registered KMS clients.
+func ClearKMSClients() {
+	kmsClientsMu.Lock()
+	defer kmsClientsMu.Unlock()
+	kmsClients = []KMSClient{}
 }

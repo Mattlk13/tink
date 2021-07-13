@@ -25,11 +25,11 @@
 #include "tink/subtle/encrypt_then_authenticate.h"
 #include "tink/subtle/hmac_boringssl.h"
 #include "tink/util/enums.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
 #include "tink/util/test_matchers.h"
 #include "proto/aes_ctr_hmac_aead.pb.h"
-#include "proto/aes_gcm.pb.h"
 #include "proto/common.pb.h"
 #include "proto/tink.pb.h"
 
@@ -192,12 +192,14 @@ TEST(AesCtrHmacAeadKeyManagerTest, CreateAead) {
   ASSERT_THAT(aead_or.status(), IsOk());
 
   auto direct_aes_ctr_or = subtle::AesCtrBoringSsl::New(
-      key.aes_ctr_key().key_value(), key.aes_ctr_key().params().iv_size());
+      util::SecretDataFromStringView(key.aes_ctr_key().key_value()),
+      key.aes_ctr_key().params().iv_size());
   ASSERT_THAT(direct_aes_ctr_or.status(), IsOk());
 
   auto direct_hmac_or = subtle::HmacBoringSsl::New(
       util::Enums::ProtoToSubtle(key.hmac_key().params().hash()),
-      key.hmac_key().params().tag_size(), key.hmac_key().key_value());
+      key.hmac_key().params().tag_size(),
+      util::SecretDataFromStringView(key.hmac_key().key_value()));
   ASSERT_THAT(direct_hmac_or.status(), IsOk());
 
   auto direct_aead_or = subtle::EncryptThenAuthenticate::New(
@@ -206,8 +208,8 @@ TEST(AesCtrHmacAeadKeyManagerTest, CreateAead) {
       key.hmac_key().params().tag_size());
   ASSERT_THAT(direct_aead_or.status(), IsOk());
 
-  EXPECT_THAT(EncryptThenDecrypt(aead_or.ValueOrDie().get(),
-                                 direct_aead_or.ValueOrDie().get(),
+  EXPECT_THAT(EncryptThenDecrypt(*aead_or.ValueOrDie(),
+                                 *direct_aead_or.ValueOrDie(),
                                  "message", "aad"),
               IsOk());
 }

@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -14,7 +16,7 @@
 
 package keyset
 
-import tinkpb "github.com/google/tink/proto/tink_go_proto"
+import tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 
 // Reader knows how to read a Keyset or an EncryptedKeyset from some source.
 // In order to turn a Reader into a KeysetHandle for use, callers must use

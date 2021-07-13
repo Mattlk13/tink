@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -28,13 +30,13 @@ namespace {
 
 TEST(EncryptThenDecrypt, Basic) {
   test::DummyAead aead("Aead 1");
-  EXPECT_THAT(EncryptThenDecrypt(&aead, &aead, "plaintext", "aad"), IsOk());
+  EXPECT_THAT(EncryptThenDecrypt(aead, aead, "plaintext", "aad"), IsOk());
 }
 
 TEST(EncryptThenDecrypt, DifferentAeads) {
   test::DummyAead aead_1("Aead 1");
   test::DummyAead aead_2("Aead 2");
-  EXPECT_THAT(EncryptThenDecrypt(&aead_1, &aead_2, "plaintext", "aad"),
+  EXPECT_THAT(EncryptThenDecrypt(aead_1, aead_2, "plaintext", "aad"),
               Not(IsOk()));
 }
 

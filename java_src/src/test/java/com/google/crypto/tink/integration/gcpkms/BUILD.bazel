@@ -1,0 +1,20 @@
+licenses(["notice"])
+
+java_test(
+    name = "GcpKmsClientTest",
+    size = "small",
+    srcs = ["GcpKmsClientTest.java"],
+    data = [
+        "@tink_base//testdata:credential.json",
+    ],
+    runtime_deps = [
+        "@maven//:com_fasterxml_jackson_core_jackson_core",
+    ],
+    deps = [
+        "//src/main/java/com/google/crypto/tink:kms_client",
+        "//src/main/java/com/google/crypto/tink:kms_clients",
+        "//src/main/java/com/google/crypto/tink/integration/gcpkms:gcp_kms_client",
+        "@maven//:com_google_truth_truth",
+        "@maven//:junit_junit",
+    ],
+)

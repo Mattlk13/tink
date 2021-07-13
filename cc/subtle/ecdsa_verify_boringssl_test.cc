@@ -23,12 +23,14 @@
 #include "include/rapidjson/document.h"
 #include "tink/public_key_sign.h"
 #include "tink/public_key_verify.h"
+#include "tink/config/tink_fips.h"
 #include "tink/subtle/ecdsa_sign_boringssl.h"
 #include "tink/subtle/common_enums.h"
 #include "tink/subtle/subtle_util_boringssl.h"
 #include "tink/subtle/wycheproof_util.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
+#include "tink/util/test_matchers.h"
 #include "tink/util/test_util.h"
 #include "gtest/gtest.h"
 
@@ -37,9 +39,15 @@ namespace tink {
 namespace subtle {
 namespace {
 
+using ::crypto::tink::test::StatusIs;
+
 class EcdsaVerifyBoringSslTest : public ::testing::Test {};
 
 TEST_F(EcdsaVerifyBoringSslTest, BasicSigning) {
+  if (IsFipsModeEnabled() && !FIPS_mode()) {
+    GTEST_SKIP()
+        << "Test is skipped if kOnlyUseFips but BoringCrypto is unavailable.";
+  }
   subtle::EcdsaSignatureEncoding encodings[2] = {
       EcdsaSignatureEncoding::DER, EcdsaSignatureEncoding::IEEE_P1363};
   for (EcdsaSignatureEncoding encoding : encodings) {
@@ -78,6 +86,10 @@ TEST_F(EcdsaVerifyBoringSslTest, BasicSigning) {
 }
 
 TEST_F(EcdsaVerifyBoringSslTest, EncodingsMismatch) {
+  if (IsFipsModeEnabled() && !FIPS_mode()) {
+    GTEST_SKIP()
+        << "Test is skipped if kOnlyUseFips but BoringCrypto is unavailable.";
+  }
   subtle::EcdsaSignatureEncoding encodings[2] = {
       EcdsaSignatureEncoding::DER, EcdsaSignatureEncoding::IEEE_P1363};
   for (EcdsaSignatureEncoding encoding : encodings) {
@@ -110,6 +122,10 @@ TEST_F(EcdsaVerifyBoringSslTest, EncodingsMismatch) {
 }
 
 TEST_F(EcdsaVerifyBoringSslTest, NewErrors) {
+  if (IsFipsModeEnabled() && !FIPS_mode()) {
+    GTEST_SKIP()
+        << "Test is skipped if kOnlyUseFips but BoringCrypto is unavailable.";
+  }
   auto ec_key = SubtleUtilBoringSSL::GetNewEcKey(EllipticCurveType::NIST_P256)
                     .ValueOrDie();
   auto verifier_result = EcdsaVerifyBoringSsl::New(
@@ -165,8 +181,8 @@ bool TestSignatures(const std::string& filename, bool allow_skipping,
       std::string expected = test["result"].GetString();
       std::string msg = WycheproofUtil::GetBytes(test["msg"]);
       std::string sig = WycheproofUtil::GetBytes(test["sig"]);
-      std::string id = absl::StrCat(test["tcId"].GetInt(), " ",
-                               test["comment"].GetString());
+      std::string id =
+          absl::StrCat(test["tcId"].GetInt(), " ", test["comment"].GetString());
       auto status = verifier->Verify(sig, msg);
       if (expected == "valid") {
         if (status.ok()) {
@@ -203,23 +219,65 @@ bool TestSignatures(const std::string& filename, bool allow_skipping,
 }
 
 TEST_F(EcdsaVerifyBoringSslTest, WycheproofCurveP256) {
+  if (IsFipsModeEnabled() && !FIPS_mode()) {
+    GTEST_SKIP()
+        << "Test is skipped if kOnlyUseFips but BoringCrypto is unavailable.";
+  }
   ASSERT_TRUE(TestSignatures("ecdsa_secp256r1_sha256_test.json", false,
                              subtle::EcdsaSignatureEncoding::DER));
 }
 
 TEST_F(EcdsaVerifyBoringSslTest, WycheproofCurveP384) {
+  if (IsFipsModeEnabled() && !FIPS_mode()) {
+    GTEST_SKIP()
+        << "Test is skipped if kOnlyUseFips but BoringCrypto is unavailable.";
+  }
   ASSERT_TRUE(TestSignatures("ecdsa_secp384r1_sha512_test.json", false,
                              subtle::EcdsaSignatureEncoding::DER));
 }
 
 TEST_F(EcdsaVerifyBoringSslTest, WycheproofCurveP521) {
+  if (IsFipsModeEnabled() && !FIPS_mode()) {
+    GTEST_SKIP()
+        << "Test is skipped if kOnlyUseFips but BoringCrypto is unavailable.";
+  }
   ASSERT_TRUE(TestSignatures("ecdsa_secp521r1_sha512_test.json", false,
                              subtle::EcdsaSignatureEncoding::DER));
 }
 
 TEST_F(EcdsaVerifyBoringSslTest, WycheproofWithIeeeP1363Encoding) {
+  if (IsFipsModeEnabled() && !FIPS_mode()) {
+    GTEST_SKIP()
+        << "Test is skipped if kOnlyUseFips but BoringCrypto is unavailable.";
+  }
   ASSERT_TRUE(TestSignatures("ecdsa_webcrypto_test.json", true,
                              subtle::EcdsaSignatureEncoding::IEEE_P1363));
+}
+
+// FIPS-only mode test
+TEST_F(EcdsaVerifyBoringSslTest, TestFipsFailWithoutBoringCrypto) {
+  if (!IsFipsModeEnabled() || FIPS_mode()) {
+    GTEST_SKIP()
+        << "Test assumes kOnlyUseFips but BoringCrypto is unavailable.";
+  }
+
+  auto ec_key = SubtleUtilBoringSSL::GetNewEcKey(EllipticCurveType::NIST_P256)
+                    .ValueOrDie();
+  EXPECT_THAT(EcdsaVerifyBoringSsl::New(ec_key, HashType::SHA256,
+                                      EcdsaSignatureEncoding::DER).status(),
+              StatusIs(util::error::INTERNAL));
+
+  ec_key = SubtleUtilBoringSSL::GetNewEcKey(EllipticCurveType::NIST_P384)
+                    .ValueOrDie();
+  EXPECT_THAT(EcdsaVerifyBoringSsl::New(ec_key, HashType::SHA256,
+                                      EcdsaSignatureEncoding::DER).status(),
+              StatusIs(util::error::INTERNAL));
+
+  ec_key = SubtleUtilBoringSSL::GetNewEcKey(EllipticCurveType::NIST_P521)
+                    .ValueOrDie();
+  EXPECT_THAT(EcdsaVerifyBoringSsl::New(ec_key, HashType::SHA256,
+                                      EcdsaSignatureEncoding::DER).status(),
+              StatusIs(util::error::INTERNAL));
 }
 
 }  // namespace

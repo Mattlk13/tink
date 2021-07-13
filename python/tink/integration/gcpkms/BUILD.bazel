@@ -1,0 +1,54 @@
+load("@rules_python//python:defs.bzl", "py_test")
+load("@tink_py_pip_deps//:requirements.bzl", "requirement")
+
+package(default_visibility = ["//:__subpackages__"])
+
+py_library(
+    name = "gcpkms",
+    srcs = ["__init__.py"],
+    srcs_version = "PY3",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":_gcp_kms_client",
+    ],
+)
+
+py_library(
+    name = "_gcp_kms_client",
+    srcs = ["_gcp_kms_client.py"],
+    srcs_version =  "PY3",
+    deps = [
+        "//tink/aead",
+        "//tink/core",
+        "//tink/cc/pybind:tink_bindings",
+    ]
+)
+
+py_test(
+    name = "_gcp_kms_client_test",
+    srcs = ["_gcp_kms_client_test.py"],
+    srcs_version =  "PY3",
+    data = [
+        "@tink_base//testdata:credentials"
+    ],
+    deps = [
+        ":gcpkms",
+        "//tink/testing:helper",
+        requirement("absl-py"),
+    ]
+)
+
+py_test(
+    name = "_gcp_kms_aead_test",
+    srcs = ["_gcp_kms_aead_test.py"],
+    srcs_version =  "PY3",
+    data = [
+        "@tink_base//testdata:credentials",
+        "@google_root_pem//file",
+    ],
+    deps = [
+        ":gcpkms",
+        "//tink/testing:helper",
+        requirement("absl-py"),
+    ]
+)

@@ -28,6 +28,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/google/tink/go/aead"
 	"github.com/google/tink/go/core/registry"
@@ -37,29 +38,21 @@ import (
 	"github.com/google/tink/go/testkeyset"
 )
 
-const (
+var (
 	gcpURI      = "gcp-kms://projects/tink-test-infrastructure/locations/global/keyRings/unit-and-integration-testing/cryptoKeys/aead-key"
-	gcpCredFile = "testdata/credential.json"
+	gcpCredFile = filepath.Join(os.Getenv("TEST_SRCDIR"), "tink_base/testdata/credential.json")
 	awsURI      = "aws-kms://arn:aws:kms:us-east-2:235739564943:key/3ee50705-5a82-4f5b-9753-05c4f473922f"
-	awsCredFile = "testdata/credentials_aws.csv"
+	awsCredFile = filepath.Join(os.Getenv("TEST_SRCDIR"), "tink_base/testdata/credentials_aws.csv")
 )
 
 func init() {
-	gcpclient, err := gcpkms.NewGCPClient(gcpURI)
-	if err != nil {
-		log.Fatal(err)
-	}
-	_, err = gcpclient.LoadCredentials(gcpCredFile)
+	gcpclient, err := gcpkms.NewClientWithCredentials(gcpURI, gcpCredFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 	registry.RegisterKMSClient(gcpclient)
 
-	awsclient, err := awskms.NewAWSClient(awsURI)
-	if err != nil {
-		log.Fatal(err)
-	}
-	_, err = awsclient.LoadCredentials(awsCredFile)
+	awsclient, err := awskms.NewClientWithCredentials(awsURI, awsCredFile)
 	if err != nil {
 		log.Fatal(err)
 	}

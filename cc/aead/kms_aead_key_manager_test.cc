@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -123,7 +125,7 @@ TEST_F(KmsAeadKeyManagerCreateTest, CreateAead) {
 
   DummyAead direct_aead("prefix1:some_key1");
 
-  EXPECT_THAT(EncryptThenDecrypt(kms_aead.ValueOrDie().get(), &direct_aead,
+  EXPECT_THAT(EncryptThenDecrypt(*kms_aead.ValueOrDie(), direct_aead,
                                  "plaintext", "aad"),
               IsOk());
 }
@@ -156,7 +158,7 @@ TEST_F(KmsAeadKeyManagerCreateTest, CreateAeadUnboundKey) {
 
   DummyAead direct_aead("prefix2:some_key2");
 
-  EXPECT_THAT(EncryptThenDecrypt(kms_aead.ValueOrDie().get(), &direct_aead,
+  EXPECT_THAT(EncryptThenDecrypt(*kms_aead.ValueOrDie(), direct_aead,
                                  "plaintext", "aad"),
               IsOk());
 }

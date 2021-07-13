@@ -16,16 +16,18 @@
 
 #include "tink/aead/aead_wrapper.h"
 
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "tink/aead.h"
 #include "tink/primitive_set.h"
 #include "tink/util/status.h"
 #include "tink/util/test_matchers.h"
 #include "tink/util/test_util.h"
+#include "proto/tink.pb.h"
 
 using ::crypto::tink::test::DummyAead;
 using ::crypto::tink::test::IsOk;
-using ::google::crypto::tink::Keyset;
+using ::google::crypto::tink::KeysetInfo;
 using ::google::crypto::tink::KeyStatusType;
 using ::google::crypto::tink::OutputPrefixType;
 
@@ -52,39 +54,42 @@ TEST(AeadSetWrapperTest, WrapEmpty) {
 }
 
 TEST(AeadSetWrapperTest, Basic) {
-  Keyset::Key* key;
-  Keyset keyset;
+  KeysetInfo::KeyInfo* key_info;
+  KeysetInfo keyset_info;
 
   uint32_t key_id_0 = 1234543;
-  key = keyset.add_key();
-  key->set_output_prefix_type(OutputPrefixType::TINK);
-  key->set_key_id(key_id_0);
-  key->set_status(KeyStatusType::ENABLED);
+  key_info = keyset_info.add_key_info();
+  key_info->set_output_prefix_type(OutputPrefixType::TINK);
+  key_info->set_key_id(key_id_0);
+  key_info->set_status(KeyStatusType::ENABLED);
 
   uint32_t key_id_1 = 726329;
-  key = keyset.add_key();
-  key->set_output_prefix_type(OutputPrefixType::LEGACY);
-  key->set_key_id(key_id_1);
-  key->set_status(KeyStatusType::ENABLED);
+  key_info = keyset_info.add_key_info();
+  key_info->set_output_prefix_type(OutputPrefixType::LEGACY);
+  key_info->set_key_id(key_id_1);
+  key_info->set_status(KeyStatusType::ENABLED);
 
   uint32_t key_id_2 = 7213743;
-  key = keyset.add_key();
-  key->set_output_prefix_type(OutputPrefixType::TINK);
-  key->set_key_id(key_id_2);
-  key->set_status(KeyStatusType::ENABLED);
+  key_info = keyset_info.add_key_info();
+  key_info->set_output_prefix_type(OutputPrefixType::TINK);
+  key_info->set_key_id(key_id_2);
+  key_info->set_status(KeyStatusType::ENABLED);
 
   std::string aead_name_0 = "aead0";
   std::string aead_name_1 = "aead1";
   std::string aead_name_2 = "aead2";
   std::unique_ptr<PrimitiveSet<Aead>> aead_set(new PrimitiveSet<Aead>());
   std::unique_ptr<Aead> aead = absl::make_unique<DummyAead>(aead_name_0);
-  auto entry_result = aead_set->AddPrimitive(std::move(aead), keyset.key(0));
+  auto entry_result =
+      aead_set->AddPrimitive(std::move(aead), keyset_info.key_info(0));
   ASSERT_TRUE(entry_result.ok());
   aead = absl::make_unique<DummyAead>(aead_name_1);
-  entry_result = aead_set->AddPrimitive(std::move(aead), keyset.key(1));
+  entry_result =
+      aead_set->AddPrimitive(std::move(aead), keyset_info.key_info(1));
   ASSERT_TRUE(entry_result.ok());
   aead = absl::make_unique<DummyAead>(aead_name_2);
-  entry_result = aead_set->AddPrimitive(std::move(aead), keyset.key(2));
+  entry_result =
+      aead_set->AddPrimitive(std::move(aead), keyset_info.key_info(2));
   ASSERT_TRUE(entry_result.ok());
   // The last key is the primary.
   ASSERT_THAT(aead_set->set_primary(entry_result.ValueOrDie()), IsOk());
@@ -114,6 +119,73 @@ TEST(AeadSetWrapperTest, Basic) {
                       decrypt_result.status().error_message());
 }
 
+TEST(AeadSetWrapperTest, DecryptNonPrimary) {
+  KeysetInfo::KeyInfo* key_info;
+  KeysetInfo keyset_info;
+
+  uint32_t key_id_0 = 1234543;
+  key_info = keyset_info.add_key_info();
+  key_info->set_output_prefix_type(OutputPrefixType::TINK);
+  key_info->set_key_id(key_id_0);
+  key_info->set_status(KeyStatusType::ENABLED);
+
+  uint32_t key_id_1 = 726329;
+  key_info = keyset_info.add_key_info();
+  key_info->set_output_prefix_type(OutputPrefixType::LEGACY);
+  key_info->set_key_id(key_id_1);
+  key_info->set_status(KeyStatusType::ENABLED);
+
+  uint32_t key_id_2 = 7213743;
+  key_info = keyset_info.add_key_info();
+  key_info->set_output_prefix_type(OutputPrefixType::TINK);
+  key_info->set_key_id(key_id_2);
+  key_info->set_status(KeyStatusType::ENABLED);
+
+  std::string aead_name_0 = "aead0";
+  std::string aead_name_1 = "aead1";
+  std::string aead_name_2 = "aead2";
+  std::unique_ptr<PrimitiveSet<Aead>> aead_set(new PrimitiveSet<Aead>());
+  std::unique_ptr<Aead> aead = absl::make_unique<DummyAead>(aead_name_0);
+
+  // Encrypt some message with the first aead
+  std::string plaintext = "some_plaintext";
+  std::string aad = "some_aad";
+
+  auto encrypt_result = aead->Encrypt(plaintext, aad);
+  EXPECT_THAT(encrypt_result.status(), IsOk());
+  std::string ciphertext = encrypt_result.ValueOrDie();
+  auto entry_result =
+      aead_set->AddPrimitive(std::move(aead), keyset_info.key_info(0));
+  ASSERT_TRUE(entry_result.ok());
+  ASSERT_THAT(aead_set->set_primary(entry_result.ValueOrDie()), IsOk());
+
+  // Add missing key id
+  ciphertext =
+      absl::StrCat(aead_set->get_primary()->get_identifier(), ciphertext);
+
+  aead = absl::make_unique<DummyAead>(aead_name_1);
+  entry_result =
+      aead_set->AddPrimitive(std::move(aead), keyset_info.key_info(1));
+  ASSERT_TRUE(entry_result.ok());
+  aead = absl::make_unique<DummyAead>(aead_name_2);
+  entry_result =
+      aead_set->AddPrimitive(std::move(aead), keyset_info.key_info(2));
+  ASSERT_TRUE(entry_result.ok());
+  // The last key is the primary.
+  ASSERT_THAT(aead_set->set_primary(entry_result.ValueOrDie()), IsOk());
+
+  // Wrap aead_set and test the resulting Aead.
+  AeadWrapper wrapper;
+  auto aead_result = wrapper.Wrap(std::move(aead_set));
+  EXPECT_THAT(aead_result.status(), IsOk());
+  aead = std::move(aead_result.ValueOrDie());
+  EXPECT_THAT(ciphertext, testing::HasSubstr(aead_name_0));
+
+  // Primary key is different from the one we used to encrypt. This
+  // should still be decryptable as we have the correct key in the set.
+  auto decrypt_result = aead->Decrypt(ciphertext, aad);
+  EXPECT_TRUE(decrypt_result.ok()) << decrypt_result.status();
+}
 }  // namespace
 }  // namespace tink
 }  // namespace crypto

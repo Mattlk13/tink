@@ -1,3 +1,5 @@
+// Copyright 2018 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -17,15 +19,14 @@ package aead
 import (
 	"fmt"
 
-	"github.com/golang/protobuf/proto"
 	"golang.org/x/crypto/chacha20poly1305"
+	"github.com/golang/protobuf/proto"
+	"github.com/google/tink/go/aead/subtle"
 	"github.com/google/tink/go/keyset"
-	"github.com/google/tink/go/core/registry"
-	"github.com/google/tink/go/subtle/aead"
 	"github.com/google/tink/go/subtle/random"
 
-	cppb "github.com/google/tink/proto/chacha20_poly1305_go_proto"
-	tinkpb "github.com/google/tink/proto/tink_go_proto"
+	cppb "github.com/google/tink/go/proto/chacha20_poly1305_go_proto"
+	tinkpb "github.com/google/tink/go/proto/tink_go_proto"
 )
 
 const (
@@ -40,9 +41,6 @@ var errInvalidChaCha20Poly1305KeyFormat = fmt.Errorf("chacha20poly1305_key_manag
 // chaCha20Poly1305KeyManager is an implementation of KeyManager interface.
 // It generates new ChaCha20Poly1305Key keys and produces new instances of ChaCha20Poly1305 subtle.
 type chaCha20Poly1305KeyManager struct{}
-
-// Assert that chaCha20Poly1305KeyManager implements the KeyManager interface.
-var _ registry.KeyManager = (*chaCha20Poly1305KeyManager)(nil)
 
 // newChaCha20Poly1305KeyManager creates a new chaCha20Poly1305KeyManager.
 func newChaCha20Poly1305KeyManager() *chaCha20Poly1305KeyManager {
@@ -61,7 +59,7 @@ func (km *chaCha20Poly1305KeyManager) Primitive(serializedKey []byte) (interface
 	if err := km.validateKey(key); err != nil {
 		return nil, err
 	}
-	ret, err := aead.NewChaCha20Poly1305(key.KeyValue)
+	ret, err := subtle.NewChaCha20Poly1305(key.KeyValue)
 	if err != nil {
 		return nil, fmt.Errorf("chacha20poly1305_key_manager: cannot create new primitive: %s", err)
 	}

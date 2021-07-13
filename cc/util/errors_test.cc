@@ -14,29 +14,22 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-#include <stdarg.h>
+#include "tink/util/errors.h"
 
 #include "gtest/gtest.h"
-#include "tink/util/errors.h"
+#include "absl/status/status.h"
 #include "tink/util/status.h"
-// placeholder_google3_status_header, please ignore
 
 namespace crypto {
 namespace tink {
 namespace {
 
-class ErrorsTest : public ::testing::Test {
- protected:
-  void SetUp() override {}
-  void TearDown() override {}
-};
-
-TEST_F(ErrorsTest, ToStatusFTest) {
+TEST(ErrorsTest, ToStatusFTest) {
   const char* const msg1 = "test message 1";
   const char* const msg2 = "test message %s 2 %d";
   crypto::tink::util::Status status;
 
-  status = ToStatusF(crypto::tink::util::error::OK, msg1);
+  status = util::Status(crypto::tink::util::error::OK, msg1);
   EXPECT_TRUE(status.ok());
   // if status is OK, error message is ignored
   EXPECT_EQ("", status.error_message());
@@ -49,7 +42,15 @@ TEST_F(ErrorsTest, ToStatusFTest) {
   EXPECT_EQ(crypto::tink::util::error::UNKNOWN, status.error_code());
 }
 
-// placeholder_status_conversion_test, please ignore
+TEST(ErrorsTest, ToAbslStatus) {
+  crypto::tink::util::Status tink_status(util::error::INVALID_ARGUMENT,
+                                         "error");
+  ::absl::Status g3_status(tink_status);
+  EXPECT_FALSE(g3_status.ok());
+  EXPECT_EQ(g3_status.message(), "error");
+
+  EXPECT_EQ(::absl::Status(crypto::tink::util::OkStatus()), ::absl::OkStatus());
+}
 
 }  // namespace
 }  // namespace tink

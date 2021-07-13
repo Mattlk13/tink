@@ -19,21 +19,31 @@
 #include <string>
 #include <vector>
 
+#include "gtest/gtest.h"
 #include "absl/strings/str_cat.h"
+#include "openssl/err.h"
+#include "tink/config/tink_fips.h"
 #include "tink/subtle/wycheproof_util.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
+#include "tink/util/test_matchers.h"
 #include "tink/util/test_util.h"
-#include "gtest/gtest.h"
-#include "openssl/err.h"
 
 namespace crypto {
 namespace tink {
 namespace subtle {
 namespace {
 
-TEST(AesEaxBoringSslTest, testBasic) {
-  std::string key(test::HexDecodeOrDie("000102030405060708090a0b0c0d0e0f"));
+using ::crypto::tink::test::StatusIs;
+
+TEST(AesEaxBoringSslTest, TestBasic) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+
+  util::SecretData key = util::SecretDataFromStringView(
+      test::HexDecodeOrDie("000102030405060708090a0b0c0d0e0f"));
   size_t nonce_size = 12;
   auto res = AesEaxBoringSsl::New(key, nonce_size);
   EXPECT_TRUE(res.ok()) << res.status();
@@ -48,8 +58,13 @@ TEST(AesEaxBoringSslTest, testBasic) {
   EXPECT_EQ(pt.ValueOrDie(), message);
 }
 
-TEST(AesEaxBoringSslTest, testMessageSize) {
-  std::string key(test::HexDecodeOrDie("000102030405060708090a0b0c0d0e0f"));
+TEST(AesEaxBoringSslTest, TestMessageSize) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+
+  util::SecretData key = util::SecretDataFromStringView(
+      test::HexDecodeOrDie("000102030405060708090a0b0c0d0e0f"));
   size_t nonce_size = 12;
   auto res = AesEaxBoringSsl::New(key, nonce_size);
   EXPECT_TRUE(res.ok()) << res.status();
@@ -66,8 +81,13 @@ TEST(AesEaxBoringSslTest, testMessageSize) {
   }
 }
 
-TEST(AesEaxBoringSslTest, testAadSize) {
-  std::string key(test::HexDecodeOrDie("000102030405060708090a0b0c0d0e0f"));
+TEST(AesEaxBoringSslTest, TestAadSize) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+
+  util::SecretData key = util::SecretDataFromStringView(
+      test::HexDecodeOrDie("000102030405060708090a0b0c0d0e0f"));
   size_t nonce_size = 12;
   auto res = AesEaxBoringSsl::New(key, nonce_size);
   EXPECT_TRUE(res.ok()) << res.status();
@@ -84,8 +104,13 @@ TEST(AesEaxBoringSslTest, testAadSize) {
   }
 }
 
-TEST(AesEaxBoringSslTest, testLongNonce) {
-  std::string key(test::HexDecodeOrDie("000102030405060708090a0b0c0d0e0f"));
+TEST(AesEaxBoringSslTest, TestLongNonce) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+
+  util::SecretData key = util::SecretDataFromStringView(
+      test::HexDecodeOrDie("000102030405060708090a0b0c0d0e0f"));
   size_t nonce_size = 16;
   auto res = AesEaxBoringSsl::New(key, nonce_size);
   EXPECT_TRUE(res.ok()) << res.status();
@@ -100,9 +125,14 @@ TEST(AesEaxBoringSslTest, testLongNonce) {
   EXPECT_EQ(pt.ValueOrDie(), message);
 }
 
-TEST(AesEaxBoringSslTest, testModification) {
+TEST(AesEaxBoringSslTest, TestModification) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+
   size_t nonce_size = 12;
-  std::string key(test::HexDecodeOrDie("000102030405060708090a0b0c0d0e0f"));
+  util::SecretData key = util::SecretDataFromStringView(
+      test::HexDecodeOrDie("000102030405060708090a0b0c0d0e0f"));
   auto cipher = std::move(AesEaxBoringSsl::New(key, nonce_size).ValueOrDie());
   std::string message = "Some data to encrypt.";
   std::string aad = "Some data to authenticate.";
@@ -128,26 +158,32 @@ TEST(AesEaxBoringSslTest, testModification) {
   }
 }
 
-TEST(AesEaxBoringSslTest, testInvalidKeySizes) {
+TEST(AesEaxBoringSslTest, TestInvalidKeySizes) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+
   size_t nonce_size = 12;
   for (int keysize = 0; keysize < 65; keysize++) {
     if (keysize == 16 || keysize == 32) {
       continue;
     }
-    std::string key(keysize, 'x');
+    util::SecretData key(keysize, 'x');
     auto cipher = AesEaxBoringSsl::New(key, nonce_size);
     EXPECT_FALSE(cipher.ok());
   }
-  absl::string_view null_string_view;
-  auto nokeycipher = AesEaxBoringSsl::New(null_string_view, nonce_size);
-  EXPECT_FALSE(nokeycipher.ok());
 }
 
-TEST(AesEaxBoringSslTest, testEmpty) {
+TEST(AesEaxBoringSslTest, TestEmpty) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+
   size_t nonce_size = 12;
-  std::string key(test::HexDecodeOrDie("bedcfb5a011ebc84600fcb296c15af0d"));
+  util::SecretData key = util::SecretDataFromStringView(
+      test::HexDecodeOrDie("bedcfb5a011ebc84600fcb296c15af0d"));
   std::string nonce(test::HexDecodeOrDie("438a547a94ea88dce46c6c85"));
-  // Expected tag is an empty std::string with an empty tag is encrypted with
+  // Expected tag is an empty string with an empty tag is encrypted with
   // the nonce above;
   std::string tag(test::HexDecodeOrDie("9607977cd7556b1dfedf0c73a35a5197"));
   std::string ciphertext = nonce + tag;
@@ -236,7 +272,8 @@ bool WycheproofTest(const rapidjson::Document &root) {
     }
     for (const rapidjson::Value& test : test_group["tests"].GetArray()) {
       std::string comment = test["comment"].GetString();
-      std::string key = WycheproofUtil::GetBytes(test["key"]);
+      util::SecretData key =
+          util::SecretDataFromStringView(WycheproofUtil::GetBytes(test["key"]));
       std::string iv = WycheproofUtil::GetBytes(test["iv"]);
       std::string msg = WycheproofUtil::GetBytes(test["msg"]);
       std::string ct = WycheproofUtil::GetBytes(test["ct"]);
@@ -274,9 +311,29 @@ bool WycheproofTest(const rapidjson::Document &root) {
 }
 
 TEST(AesEaxBoringSslTest, TestVectors) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+
   std::unique_ptr<rapidjson::Document> root =
       WycheproofUtil::ReadTestVectors("aes_eax_test.json");
   ASSERT_TRUE(WycheproofTest(*root));
+}
+
+TEST(AesEaxBoringSslTest, TestFipsOnly) {
+  if (!IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Only supported in FIPS-only mode";
+  }
+
+  util::SecretData key128 = util::SecretDataFromStringView(
+      test::HexDecodeOrDie("000102030405060708090a0b0c0d0e0f"));
+  util::SecretData key256 = util::SecretDataFromStringView(test::HexDecodeOrDie(
+      "000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f"));
+
+  EXPECT_THAT(subtle::AesEaxBoringSsl::New(key128, 16).status(),
+              StatusIs(util::error::INTERNAL));
+  EXPECT_THAT(subtle::AesEaxBoringSsl::New(key256, 16).status(),
+              StatusIs(util::error::INTERNAL));
 }
 
 }  // namespace

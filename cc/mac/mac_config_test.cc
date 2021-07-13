@@ -16,8 +16,11 @@
 
 #include "tink/mac/mac_config.h"
 
+#include <list>
+
 #include "gtest/gtest.h"
 #include "tink/config.h"
+#include "tink/config/tink_fips.h"
 #include "tink/keyset_handle.h"
 #include "tink/mac.h"
 #include "tink/mac/hmac_key_manager.h"
@@ -43,6 +46,10 @@ class MacConfigTest : public ::testing::Test {
 };
 
 TEST_F(MacConfigTest, Basic) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+
   EXPECT_THAT(
       Registry::get_key_manager<Mac>(HmacKeyManager().get_key_type()).status(),
       StatusIs(util::error::NOT_FOUND));
@@ -55,18 +62,22 @@ TEST_F(MacConfigTest, Basic) {
 // Tests that the MacWrapper has been properly registered and we can wrap
 // primitives.
 TEST_F(MacConfigTest, WrappersRegistered) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP() << "Not supported in FIPS-only mode";
+  }
+
   ASSERT_TRUE(MacConfig::Register().ok());
 
-  google::crypto::tink::Keyset::Key key;
-  key.set_status(google::crypto::tink::KeyStatusType::ENABLED);
-  key.set_key_id(1234);
-  key.set_output_prefix_type(google::crypto::tink::OutputPrefixType::RAW);
+  google::crypto::tink::KeysetInfo::KeyInfo key_info;
+  key_info.set_status(google::crypto::tink::KeyStatusType::ENABLED);
+  key_info.set_key_id(1234);
+  key_info.set_output_prefix_type(google::crypto::tink::OutputPrefixType::RAW);
   auto primitive_set = absl::make_unique<PrimitiveSet<Mac>>();
   ASSERT_TRUE(
       primitive_set
           ->set_primary(
               primitive_set
-                  ->AddPrimitive(absl::make_unique<DummyMac>("dummy"), key)
+                  ->AddPrimitive(absl::make_unique<DummyMac>("dummy"), key_info)
                   .ValueOrDie())
           .ok());
 
@@ -82,6 +93,41 @@ TEST_F(MacConfigTest, WrappersRegistered) {
                   .ok());
   EXPECT_FALSE(
       DummyMac("dummy").VerifyMac(mac_result.ValueOrDie(), "faked text").ok());
+}
+
+// FIPS-only mode tests
+TEST_F(MacConfigTest, RegisterNonFipsTemplates) {
+  if (!IsFipsModeEnabled() || !FIPS_mode()) {
+    GTEST_SKIP() << "Only supported in FIPS-only mode";
+  }
+
+  EXPECT_THAT(MacConfig::Register(), IsOk());
+
+  std::list<google::crypto::tink::KeyTemplate> non_fips_key_templates;
+  non_fips_key_templates.push_back(MacKeyTemplates::AesCmac());
+
+  for (auto key_template : non_fips_key_templates) {
+    EXPECT_THAT(KeysetHandle::GenerateNew(key_template).status(),
+                StatusIs(util::error::NOT_FOUND));
+  }
+}
+
+TEST_F(MacConfigTest, RegisterFipsValidTemplates) {
+  if (!IsFipsModeEnabled() || !FIPS_mode()) {
+    GTEST_SKIP() << "Only supported in FIPS-only mode";
+  }
+
+  EXPECT_THAT(MacConfig::Register(), IsOk());
+
+  std::list<google::crypto::tink::KeyTemplate> fips_key_templates;
+  fips_key_templates.push_back(MacKeyTemplates::HmacSha256());
+  fips_key_templates.push_back(MacKeyTemplates::HmacSha256HalfSizeTag());
+  fips_key_templates.push_back(MacKeyTemplates::HmacSha512());
+  fips_key_templates.push_back(MacKeyTemplates::HmacSha512HalfSizeTag());
+
+  for (auto key_template : fips_key_templates) {
+    EXPECT_THAT(KeysetHandle::GenerateNew(key_template).status(), IsOk());
+  }
 }
 
 }  // namespace

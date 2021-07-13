@@ -1,3 +1,5 @@
+// Copyright 2018 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -18,6 +20,7 @@
 #include "gtest/gtest.h"
 #include "tink/aead.h"
 #include "tink/subtle/aead_test_util.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
 #include "tink/util/test_matchers.h"
@@ -178,12 +181,13 @@ TEST(AesGcmKeyManagerTest, CreateAead) {
   ASSERT_THAT(aead_or.status(), IsOk());
 
   StatusOr<std::unique_ptr<Aead>> boring_ssl_aead_or =
-      subtle::AesEaxBoringSsl::New(key_or.ValueOrDie().key_value(),
-                                   key_or.ValueOrDie().params().iv_size());
+      subtle::AesEaxBoringSsl::New(
+          util::SecretDataFromStringView(key_or.ValueOrDie().key_value()),
+          key_or.ValueOrDie().params().iv_size());
   ASSERT_THAT(boring_ssl_aead_or.status(), IsOk());
 
-  ASSERT_THAT(EncryptThenDecrypt(aead_or.ValueOrDie().get(),
-                                 boring_ssl_aead_or.ValueOrDie().get(),
+  ASSERT_THAT(EncryptThenDecrypt(*aead_or.ValueOrDie(),
+                                 *boring_ssl_aead_or.ValueOrDie(),
                                  "message", "aad"),
               IsOk());
 }

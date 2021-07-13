@@ -1,0 +1,29 @@
+licenses(["notice"])
+
+package(default_visibility = ["//visibility:public"])
+
+java_test(
+    name = "KeyTemplateProtoConverterTest",
+    size = "small",
+    srcs = ["KeyTemplateProtoConverterTest.java"],
+    deps = [
+        "//proto:tink_java_proto",
+        "//src/main/java/com/google/crypto/tink:key_template",
+        "//src/main/java/com/google/crypto/tink/aead:aes_gcm_key_manager",
+        "//src/main/java/com/google/crypto/tink/internal:key_template_proto_converter",
+        "@com_google_protobuf//:protobuf_javalite",
+        "@maven//:com_google_truth_truth",
+        "@maven//:junit_junit",
+    ],
+)
+
+java_test(
+    name = "UtilTest",
+    size = "small",
+    srcs = ["UtilTest.java"],
+    deps = [
+        "//src/main/java/com/google/crypto/tink/internal:util",
+        "@maven//:com_google_truth_truth",
+        "@maven//:junit_junit",
+    ],
+)

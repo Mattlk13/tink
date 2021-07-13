@@ -32,8 +32,10 @@
 #include <sstream>
 #include <string>
 
+#include "absl/memory/memory.h"
 #include "absl/strings/string_view.h"
 #include "tink/binary_keyset_reader.h"
+#include "tink/binary_keyset_writer.h"
 #include "tink/cleartext_keyset_handle.h"
 #include "tink/keyset_handle.h"
 #include "tink/util/status.h"
@@ -123,6 +125,12 @@ static NSString *const kTinkService = @"com.google.crypto.tink";
 }
 
 - (nullable instancetype)initFromKeychainWithName:(NSString *)keysetName error:(NSError **)error {
+  return [self initFromKeychainWithName:keysetName accessGroup:nil error:error];
+}
+
+- (nullable instancetype)initFromKeychainWithName:(NSString *)keysetName
+                                      accessGroup:(NSString *)accessGroup
+                                            error:(NSError **)error {
   if (keysetName == nil) {
     if (error) {
       *error = TINKStatusToError(crypto::tink::util::Status(
@@ -138,6 +146,13 @@ static NSString *const kTinkService = @"com.google.crypto.tink";
       (__bridge id)kSecAttrService : kTinkService,
       (__bridge id)kSecReturnData : (__bridge id)kCFBooleanTrue,
     };
+
+    if (accessGroup) {
+      NSMutableDictionary *mutableGetQuery =
+          [NSMutableDictionary dictionaryWithDictionary:getQuery];
+      [mutableGetQuery setObject:accessGroup forKey:(__bridge id)kSecAttrAccessGroup];
+      getQuery = [mutableGetQuery copy];
+    }
 
     crypto::tink::util::error::Code errorCode = crypto::tink::util::error::OK;
     std::string errorMessage = "";
@@ -190,6 +205,12 @@ static NSString *const kTinkService = @"com.google.crypto.tink";
 }
 
 + (BOOL)deleteFromKeychainWithName:(NSString *)keysetName error:(NSError **)error {
+  return [self deleteFromKeychainWithName:keysetName accessGroup:nil error:error];
+}
+
++ (BOOL)deleteFromKeychainWithName:(NSString *)keysetName
+                       accessGroup:(NSString *)accessGroup
+                             error:(NSError **)error {
   if (keysetName == nil) {
     if (error) {
       *error = TINKStatusToError(crypto::tink::util::Status(
@@ -203,6 +224,13 @@ static NSString *const kTinkService = @"com.google.crypto.tink";
     (__bridge id)kSecAttrAccount : keysetName,
     (__bridge id)kSecAttrService : kTinkService,
   };
+
+  if (accessGroup) {
+    NSMutableDictionary *mutableAttributes =
+        [NSMutableDictionary dictionaryWithDictionary:attributes];
+    [mutableAttributes setObject:accessGroup forKey:(__bridge id)kSecAttrAccessGroup];
+    attributes = [mutableAttributes copy];
+  }
 
   OSStatus status = SecItemDelete((CFDictionaryRef)attributes);
   if (status != errSecSuccess && status != errSecItemNotFound) {
@@ -221,6 +249,13 @@ static NSString *const kTinkService = @"com.google.crypto.tink";
 }
 
 - (BOOL)writeToKeychainWithName:(NSString *)keysetName
+                      overwrite:(BOOL)overwrite
+                          error:(NSError **)error {
+  return [self writeToKeychainWithName:keysetName accessGroup:nil overwrite:overwrite error:error];
+}
+
+- (BOOL)writeToKeychainWithName:(NSString *)keysetName
+                    accessGroup:(NSString *)accessGroup
                       overwrite:(BOOL)overwrite
                           error:(NSError **)error {
   if (keysetName == nil) {
@@ -258,6 +293,13 @@ static NSString *const kTinkService = @"com.google.crypto.tink";
     (__bridge id)kSecReturnData : (__bridge id)kCFBooleanTrue,
     (__bridge id)kSecValueData : keysetData,
   };
+
+  if (accessGroup) {
+    NSMutableDictionary *mutableAttributes =
+        [NSMutableDictionary dictionaryWithDictionary:attributes];
+    [mutableAttributes setObject:accessGroup forKey:(__bridge id)kSecAttrAccessGroup];
+    attributes = [mutableAttributes copy];
+  }
 
   OSStatus status = SecItemAdd((__bridge CFDictionaryRef)attributes, NULL);
   switch (status) {
@@ -317,6 +359,27 @@ static NSString *const kTinkService = @"com.google.crypto.tink";
     return nil;
   }
   return [[TINKKeysetHandle alloc] initWithCCKeysetHandle:std::move(status.ValueOrDie())];
+}
+
+- (NSData *)serializedKeysetNoSecret:(NSError **)error {
+  std::stringbuf buffer;
+  auto writerResult = crypto::tink::BinaryKeysetWriter::New(
+      absl::make_unique<std::ostream>(&buffer));
+  if (!writerResult.ok()) {
+    if (error) {
+      *error = TINKStatusToError(writerResult.status());
+    }
+    return nil;
+  }
+  auto writer = std::move(writerResult.ValueOrDie());
+  auto writeNoSecretStatus = self.ccKeysetHandle->WriteNoSecret(writer.get());
+  if (!writeNoSecretStatus.ok()) {
+    if (error) {
+      *error = TINKStatusToError(writeNoSecretStatus);
+    }
+    return nil;
+  }
+  return TINKStringToNSData(buffer.str());
 }
 
 @end

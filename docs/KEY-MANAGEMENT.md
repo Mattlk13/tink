@@ -10,7 +10,7 @@ about Tink](https://www.youtube.com/watch?v=pqev9r3rUJs&t=9665) presented at
 
 [Tinkey](TINKEY.md) is a command-line tool that allows managing Tink's key
 material. Tink also provides a rich key management API (e.g., see
-[KeysetManager](https://github.com/google/tink/blob/master/java/src/main/java/com/google/crypto/tink/KeysetManager.java)).
+[KeysetManager](https://github.com/google/tink/blob/master/java_src/src/main/java/com/google/crypto/tink/KeysetManager.java)).
 
 ## Key, Keyset, and KeysetHandle
 
@@ -54,10 +54,12 @@ material.
 Tink/Tinkey can encrypt or decrypt keysets with master keys residing in remote
 KMSes. Currently, the following KMSes are supported:
 
--   Google Cloud KMS
--   Amazon KMS
--   Android Keystore
--   Apple iOS KeyChain (planned)
+-   [Google Cloud KMS](https://cloud.google.com/kms/)
+-   [AWS KMS](https://aws.amazon.com/kms/)
+-   [Android Keystore](https://developer.android.com/training/articles/keystore)
+
+On iOS, Tink can also directly load or store keysets in
+[iOS KeyChain](https://developer.apple.com/documentation/security/keychain_services).
 
 You can easily add support for in-house key management systems, without having
 to change anything in Tink/Tinkey. For example, when Tink/Tinkey is deployed at
@@ -103,3 +105,26 @@ Tink/Tinkey can also load the default credentials:
 
 *   Google Cloud KMS:
     https://developers.google.com/identity/protocols/application-default-credentials.
+
+## Envelope encryption
+
+Via the AEAD interface, Tink supports envelope encryption in tandem with GCP and
+AWS KMS. This provides one of the simplest key management options.
+
+For more context, reference the following cloud service provider documentation:
+
+*   [Amazon Web Services](https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#enveloping)
+*   [Google Cloud Platform](https://cloud.google.com/kms/docs/envelope-encryption)
+
+In this mode, you first create a key encryption key (KEK) in a Key Management
+System (KMS) such as AWS KMS or Google Cloud KMS. To encrypt some data, you then
+locally generate a data encryption key (DEK), encrypt data with the DEK, ask the
+KMS to encrypt the DEK with the KEK, and store the encrypted DEK with the
+encrypted data. At a later point, you can retrieve the encrypted data and the
+encrypted DEK, ask the KMS to decrypt the DEK, and use the decrypted DEK to
+decrypt the data.
+
+Tink supports envelope encryption in [C++](CPP-HOWTO.md#envelope-encryption),
+[Java](JAVA-HOWTO.md#envelope-encryption),
+[Go](GOLANG-HOWTO.md#envelope-encryption) and
+[Python](PYTHON-HOWTO.md#envelope-encryption).

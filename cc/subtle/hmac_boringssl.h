@@ -18,13 +18,16 @@
 #define TINK_SUBTLE_HMAC_BORINGSSL_H_
 
 #include <memory>
+#include <utility>
 
 #include "absl/strings/string_view.h"
+#include "openssl/evp.h"
 #include "tink/mac.h"
+#include "tink/internal/fips_utils.h"
 #include "tink/subtle/common_enums.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
-#include "openssl/evp.h"
 
 namespace crypto {
 namespace tink {
@@ -33,8 +36,7 @@ namespace subtle {
 class HmacBoringSsl : public Mac {
  public:
   static crypto::tink::util::StatusOr<std::unique_ptr<Mac>> New(
-      HashType hash_type,
-      uint32_t tag_size, const std::string& key_value);
+      HashType hash_type, uint32_t tag_size, util::SecretData key);
 
   // Computes and returns the HMAC for 'data'.
   crypto::tink::util::StatusOr<std::string> ComputeMac(
@@ -46,19 +48,20 @@ class HmacBoringSsl : public Mac {
       absl::string_view mac,
       absl::string_view data) const override;
 
-  virtual ~HmacBoringSsl() {}
+  static constexpr crypto::tink::internal::FipsCompatibility kFipsStatus =
+      crypto::tink::internal::FipsCompatibility::kRequiresBoringCrypto;
 
  private:
   // Minimum HMAC key size in bytes.
-  static const size_t MIN_KEY_SIZE = 16;
-  HmacBoringSsl() {}
-  HmacBoringSsl(const EVP_MD* md, uint32_t tag_size,
-                const std::string& key_value);
+  static constexpr size_t kMinKeySize = 16;
+
+  HmacBoringSsl(const EVP_MD* md, uint32_t tag_size, util::SecretData key)
+      : md_(md), tag_size_(tag_size), key_(std::move(key)) {}
 
   // HmacBoringSsl is not owner of md (it is owned by BoringSSL).
-  const EVP_MD* md_;
-  uint32_t tag_size_;
-  std::string key_value_;
+  const EVP_MD* const md_;
+  const uint32_t tag_size_;
+  const util::SecretData key_;
 };
 
 }  // namespace subtle

@@ -23,11 +23,14 @@
 #include "openssl/curve25519.h"
 #include "tink/public_key_sign.h"
 #include "tink/public_key_verify.h"
+#include "tink/config/tink_fips.h"
 #include "tink/subtle/ed25519_sign_boringssl.h"
 #include "tink/subtle/subtle_util_boringssl.h"
 #include "tink/subtle/wycheproof_util.h"
+#include "tink/util/secret_data.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
+#include "tink/util/test_matchers.h"
 #include "tink/util/test_util.h"
 
 namespace crypto {
@@ -35,9 +38,16 @@ namespace tink {
 namespace subtle {
 namespace {
 
+using ::crypto::tink::test::StatusIs;
+
 class Ed25519VerifyBoringSslTest : public ::testing::Test {};
 
 TEST_F(Ed25519VerifyBoringSslTest, testBasicSign) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP()
+        << "Test assumes kOnlyUseFips is false.";
+  }
+
   // Generate a new key pair.
   uint8_t out_public_key[ED25519_PUBLIC_KEY_LEN];
   uint8_t out_private_key[ED25519_PRIVATE_KEY_LEN];
@@ -45,9 +55,9 @@ TEST_F(Ed25519VerifyBoringSslTest, testBasicSign) {
   ED25519_keypair(out_public_key, out_private_key);
 
   std::string public_key(reinterpret_cast<const char*>(out_public_key),
-                    ED25519_PUBLIC_KEY_LEN);
-  std::string private_key(reinterpret_cast<const char*>(out_private_key),
-                     ED25519_PRIVATE_KEY_LEN);
+                         ED25519_PUBLIC_KEY_LEN);
+  util::SecretData private_key(out_private_key,
+                               out_private_key + ED25519_PRIVATE_KEY_LEN);
 
   // Create a new signer.
   auto signer_result = Ed25519SignBoringSsl::New(private_key);
@@ -75,6 +85,11 @@ TEST_F(Ed25519VerifyBoringSslTest, testBasicSign) {
 }
 
 TEST_F(Ed25519VerifyBoringSslTest, testInvalidPublicKeys) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP()
+        << "Test assumes kOnlyUseFips is false.";
+  }
+
   // Null public key.
   const absl::string_view null_public_key;
   EXPECT_FALSE(Ed25519VerifyBoringSsl::New(null_public_key).ok());
@@ -90,6 +105,11 @@ TEST_F(Ed25519VerifyBoringSslTest, testInvalidPublicKeys) {
 }
 
 TEST_F(Ed25519VerifyBoringSslTest, testMessageEmptyVersusNullStringView) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP()
+        << "Test assumes kOnlyUseFips is false.";
+  }
+
   // Generate a new key pair.
   uint8_t out_public_key[ED25519_PUBLIC_KEY_LEN];
   uint8_t out_private_key[ED25519_PRIVATE_KEY_LEN];
@@ -97,9 +117,9 @@ TEST_F(Ed25519VerifyBoringSslTest, testMessageEmptyVersusNullStringView) {
   ED25519_keypair(out_public_key, out_private_key);
 
   std::string public_key(reinterpret_cast<const char*>(out_public_key),
-                    ED25519_PUBLIC_KEY_LEN);
-  std::string private_key(reinterpret_cast<const char*>(out_private_key),
-                     ED25519_PRIVATE_KEY_LEN);
+                         ED25519_PUBLIC_KEY_LEN);
+  util::SecretData private_key(out_private_key,
+                               out_private_key + ED25519_PRIVATE_KEY_LEN);
 
   // Create a new signer.
   auto signer_result = Ed25519SignBoringSsl::New(private_key);
@@ -119,7 +139,7 @@ TEST_F(Ed25519VerifyBoringSslTest, testMessageEmptyVersusNullStringView) {
   auto status = verifier->Verify(signature, empty_message);
   EXPECT_TRUE(status.ok()) << status;
 
-  // Message is an empty std::string.
+  // Message is an empty string.
   const std::string message = "";
   signature = signer->Sign(message).ValueOrDie();
   EXPECT_EQ(signature.size(), ED25519_SIGNATURE_LEN);
@@ -127,10 +147,10 @@ TEST_F(Ed25519VerifyBoringSslTest, testMessageEmptyVersusNullStringView) {
   status = verifier->Verify(signature, message);
   EXPECT_TRUE(status.ok()) << status;
 
-  // Message is a null ptr.
-  signature = signer->Sign(nullptr).ValueOrDie();
+  // Message is a default constructed string_view.
+  signature = signer->Sign(absl::string_view()).ValueOrDie();
   EXPECT_EQ(signature.size(), ED25519_SIGNATURE_LEN);
-  status = verifier->Verify(signature, nullptr);
+  status = verifier->Verify(signature, absl::string_view());
   EXPECT_TRUE(status.ok()) << status;
 }
 
@@ -214,7 +234,31 @@ bool TestSignatures(const std::string& filename, bool allow_skipping) {
 }
 
 TEST_F(Ed25519VerifyBoringSslTest, WycheproofCurve25519) {
+  if (IsFipsModeEnabled()) {
+    GTEST_SKIP()
+        << "Test assumes kOnlyUseFips is false.";
+  }
+
   ASSERT_TRUE(TestSignatures("eddsa_test.json", false));
+}
+
+TEST_F(Ed25519VerifyBoringSslTest, testFipsMode) {
+  if (!IsFipsModeEnabled()) {
+    GTEST_SKIP()
+        << "Test assumes kOnlyUseFips.";
+  }
+
+  // Generate a new key pair.
+  uint8_t out_public_key[ED25519_PUBLIC_KEY_LEN];
+  util::SecretData private_key(ED25519_PRIVATE_KEY_LEN);
+  ED25519_keypair(out_public_key, private_key.data());
+
+  std::string public_key(reinterpret_cast<const char *>(out_public_key),
+                         ED25519_PUBLIC_KEY_LEN);
+
+  // Create a new signer.
+  EXPECT_THAT(Ed25519VerifyBoringSsl::New(public_key).status(),
+              StatusIs(util::error::INTERNAL));
 }
 
 }  // namespace

@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -178,8 +180,8 @@ TEST(AesCmacKeyManagerTest, GetPrimitive) {
   auto mac_value_or = manager_mac_or.ValueOrDie()->ComputeMac("some plaintext");
   ASSERT_THAT(mac_value_or.status(), IsOk());
 
-  auto direct_mac_or =
-      subtle::AesCmacBoringSsl::New(key.key_value(), key.params().tag_size());
+  auto direct_mac_or = subtle::AesCmacBoringSsl::New(
+      util::SecretDataFromStringView(key.key_value()), key.params().tag_size());
   ASSERT_THAT(direct_mac_or.status(), IsOk());
   EXPECT_THAT(direct_mac_or.ValueOrDie()->VerifyMac(mac_value_or.ValueOrDie(),
                                                     "some plaintext"), IsOk());

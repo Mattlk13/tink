@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# Copyright 2019 Google LLC
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -17,9 +19,11 @@ set -e
 
 cd git*/tink
 
+./kokoro/copy_credentials.sh
+
 echo "========================================================= Running cmake"
 cmake --version
-cmake . -DTINK_BUILD_TESTS=ON
+cmake . -DTINK_BUILD_TESTS=ON -DCMAKE_CXX_STANDARD=11
 echo "==================================================== Building with make"
 make -j8 all
 echo "===================================================== Testing with make"

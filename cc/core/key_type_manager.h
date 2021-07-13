@@ -17,10 +17,12 @@
 #ifndef TINK_CORE_KEY_TYPE_MANAGER_H_
 #define TINK_CORE_KEY_TYPE_MANAGER_H_
 
-#include <typeindex>
+#include <tuple>
 
-#include "absl/container/flat_hash_map.h"
+#include "absl/strings/str_cat.h"
 #include "tink/core/template_util.h"
+#include "tink/input_stream.h"
+#include "tink/internal/fips_utils.h"
 #include "tink/util/status.h"
 #include "tink/util/statusor.h"
 #include "proto/tink.pb.h"
@@ -28,11 +30,7 @@
 namespace crypto {
 namespace tink {
 
-template <typename... P>
-class List {};
-
 namespace internal {
-
 // InternalKeyFactory should not be used directly: it is an implementation
 // detail. The internal key factory provides the functions which are required
 // if a KeyTypeManager can create new keys: ValidateKeyFormat and
@@ -43,10 +41,24 @@ class InternalKeyFactory {
  public:
   virtual ~InternalKeyFactory() {}
 
+  // Validates a key format proto.  KeyFormatProtos
+  // on which this function returns a non-ok status will not be passed to
+  // CreateKey or DeriveKey.
   virtual crypto::tink::util::Status ValidateKeyFormat(
       const KeyFormatProto& key_format) const = 0;
+  // Creates a new key. This is expected to be randomized.
   virtual crypto::tink::util::StatusOr<KeyProto> CreateKey(
       const KeyFormatProto& key_format) const = 0;
+  // Creates a new key. Only needs to be overridden if it should be possible to
+  // derive keys of this type. This must be deterministic. Furthermore, in order
+  // to support long term usability of old keys, the KeyFormatProto should be
+  // versioned.
+  virtual crypto::tink::util::StatusOr<KeyProto> DeriveKey(
+      const KeyFormatProto& key_format, InputStream* input_stream) const {
+    return crypto::tink::util::Status(
+        crypto::tink::util::error::UNIMPLEMENTED,
+        "Deriving key not implemented for this key type.");
+  }
 };
 
 // Template specialization for when KeyFormatProto = void. The compiler will
@@ -83,6 +95,9 @@ template <typename KeyProtoParam, typename KeyFormatProtoParam,
 class KeyTypeManager<KeyProtoParam, KeyFormatProtoParam, List<Primitives...>>
     : public internal::InternalKeyFactory<KeyProtoParam, KeyFormatProtoParam> {
  public:
+  static_assert(
+      !crypto::tink::internal::HasDuplicates<Primitives...>::value,
+      "List or primitives contains a duplicate, which is not allowed.");
   // The types used in this key type manager; these can be useful when writing
   // templated code.
   using KeyProto = KeyProtoParam;
@@ -102,14 +117,8 @@ class KeyTypeManager<KeyProtoParam, KeyFormatProtoParam, List<Primitives...>>
   // Creates a new KeyTypeManager. The parameter(s) primitives must be some
   // number of unique_ptr<PrimitiveFactory<P>> types.
   explicit KeyTypeManager(
-      std::unique_ptr<PrimitiveFactory<Primitives>>... primitives) {
-    static_assert(
-        !crypto::tink::internal::HasDuplicates<Primitives...>::value,
-        "List or primitives contains a duplicate, which is not allowed.");
-    // https://stackoverflow.com/questions/17339789/how-to-call-a-function-on-all-variadic-template-args
-    ABSL_ATTRIBUTE_UNUSED
-    int unused[] = {(AddPrimitive(std::move(primitives)), 0)...};
-  }
+      std::unique_ptr<PrimitiveFactory<Primitives>>... primitives)
+      : primitive_factories_{std::move(primitives)...} {}
 
   // Returns the type_url identifying the key type handled by this manager.
   virtual const std::string& get_key_type() const = 0;
@@ -127,31 +136,40 @@ class KeyTypeManager<KeyProtoParam, KeyFormatProtoParam, List<Primitives...>>
   // Creates a new primitive using one of the primitive factories passed in at
   // construction time.
   template <typename Primitive>
-  crypto::tink::util::StatusOr<std::unique_ptr<Primitive>> GetPrimitive(
+  util::StatusOr<std::unique_ptr<Primitive>> GetPrimitive(
       const KeyProto& key) const {
-    auto iter = primitive_factories_.find(std::type_index(typeid(Primitive)));
-    if (iter == primitive_factories_.end()) {
-      return crypto::tink::util::Status(
-          util::error::INVALID_ARGUMENT,
-          absl::StrCat("No PrimitiveFactory was registered for type ",
-                       typeid(Primitive).name()));
-    }
-    return static_cast<PrimitiveFactory<Primitive>*>(iter->second.get())
-        ->Create(key);
+    return GetPrimitiveImpl<Primitive>(key);
+  }
+
+  // Returns the FIPS compatibility of this KeyTypeManager.
+  virtual internal::FipsCompatibility FipsStatus() const {
+    return internal::FipsCompatibility::kNotFips;
   }
 
  private:
-  // Helper function which adds a single primivie.
+  // TODO(C++17) replace with `constexpr if` after migration
   template <typename Primitive>
-  void AddPrimitive(std::unique_ptr<PrimitiveFactory<Primitive>> primitive) {
-    primitive_factories_.emplace(std::type_index(typeid(Primitive)),
-                                 std::move(primitive));
+  typename std::enable_if<
+      !internal::OccursInTuple<Primitive, std::tuple<Primitives...>>::value,
+      util::StatusOr<std::unique_ptr<Primitive>>>::type
+  GetPrimitiveImpl(const KeyProto& key) const {
+    return util::Status(
+        util::error::INVALID_ARGUMENT,
+        absl::StrCat("No PrimitiveFactory was registered for type ",
+                     typeid(Primitive).name()));
+  }
+  template <typename Primitive>
+  typename std::enable_if<
+      internal::OccursInTuple<Primitive, std::tuple<Primitives...>>::value,
+      util::StatusOr<std::unique_ptr<Primitive>>>::type
+  GetPrimitiveImpl(const KeyProto& key) const {
+    // TODO(C++14) replace with std::get<T> after migration
+    constexpr size_t index =
+        internal::IndexOf<Primitive, List<Primitives...>>::value;
+    return std::get<index>(primitive_factories_)->Create(key);
   }
 
-  // We use a shared_ptr here because shared_ptr<void> is valid (as opposed to
-  // unique_ptr<void>, where we would have to add a custom deleter with extra
-  // work).
-  absl::flat_hash_map<std::type_index, std::shared_ptr<void>>
+  std::tuple<std::unique_ptr<PrimitiveFactory<Primitives>>...>
       primitive_factories_;
 };
 

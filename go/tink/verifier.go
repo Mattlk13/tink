@@ -1,3 +1,5 @@
+// Copyright 2018 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -15,8 +17,10 @@
 package tink
 
 // Verifier is the verifying interface for digital signature.
-// Implementations of this interface are secure against adaptive chosen-message attacks.
-// Signing data ensures authenticity and integrity of that data, but not its secrecy.
+//
+// Implementations of this interface are secure against adaptive chosen-message
+// attacks.  Signing data ensures authenticity and integrity of that data, but
+// not its secrecy.
 type Verifier interface {
 	// Verifies returns nil if signature is a valid signature for data; otherwise returns an error.
 	Verify(signature, data []byte) error

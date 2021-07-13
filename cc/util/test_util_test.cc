@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -16,6 +18,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "tink/subtle/random.h"
+#include "tink/util/test_matchers.h"
 #include "proto/aes_gcm.pb.h"
 #include "proto/tink.pb.h"
 
@@ -27,6 +30,7 @@ namespace {
 using ::google::crypto::tink::AesGcmKey;
 using ::google::crypto::tink::KeyData;
 using ::testing::Eq;
+using ::testing::Not;
 
 TEST(AsKeyDataTest, Basic) {
   AesGcmKey key;
@@ -42,8 +46,68 @@ TEST(AsKeyDataTest, Basic) {
   EXPECT_THAT(deserialized_key.key_value(), Eq(key.key_value()));
 }
 
-}  // namespace
+TEST(DummyTests, Aead) {
+  EXPECT_THAT(DummyAead("dummy").Encrypt("foo", "bar").ValueOrDie(),
+              Eq("5:3:dummybarfoo"));
+}
 
+TEST(DummyTests, AeadCord) {
+  absl::Cord plaintext;
+  plaintext.Append("foo");
+  absl::Cord aad;
+  aad.Append("bar");
+
+  EXPECT_THAT(DummyCordAead("dummy").Encrypt(plaintext, aad).ValueOrDie(),
+              Eq("5:3:dummybarfoo"));
+}
+
+TEST(DummyTests, AeadCordMultipleChunks) {
+  absl::Cord plaintext;
+  plaintext.Append("f");
+  plaintext.Append("o");
+  plaintext.Append("o");
+  absl::Cord aad;
+  aad.Append("b");
+  aad.Append("a");
+  aad.Append("r");
+
+  EXPECT_THAT(DummyCordAead("dummy").Encrypt(plaintext, aad).ValueOrDie(),
+              Eq("5:3:dummybarfoo"));
+}
+
+TEST(ZTests, UniformString) {
+  EXPECT_THAT(ZTestUniformString(std::string(32, 0xaa)), IsOk());
+  EXPECT_THAT(ZTestUniformString(std::string(32, 0x00)), Not(IsOk()));
+  EXPECT_THAT(ZTestUniformString(subtle::Random::GetRandomBytes(32)), IsOk());
+}
+
+TEST(ZTests, CrossCorrelationUniformString) {
+  EXPECT_THAT(ZTestCrosscorrelationUniformStrings(std::string(32, 0xaa),
+                                                  std::string(32, 0x99)),
+              IsOk());
+  EXPECT_THAT(ZTestCrosscorrelationUniformStrings(std::string(32, 0xaa),
+                                                  std::string(32, 0xaa)),
+              Not(IsOk()));
+  EXPECT_THAT(
+      ZTestCrosscorrelationUniformStrings(subtle::Random::GetRandomBytes(32),
+                                          subtle::Random::GetRandomBytes(32)),
+      IsOk());
+}
+
+TEST(ZTests, AutocorrelationUniformString) {
+  EXPECT_THAT(ZTestAutocorrelationUniformString(std::string(32, 0xaa)),
+              Not(IsOk()));
+  EXPECT_THAT(ZTestAutocorrelationUniformString(std::string(
+                  "This is a text that is only ascii characters and therefore "
+                  "not random. It needs quite a few characters before it has "
+                  "enough to find a pattern, though, as it is text.")),
+              Not(IsOk()));
+  EXPECT_THAT(
+      ZTestAutocorrelationUniformString(subtle::Random::GetRandomBytes(32)),
+      IsOk());
+}
+
+}  // namespace
 }  // namespace test
 }  // namespace tink
 }  // namespace crypto

@@ -1,3 +1,5 @@
+// Copyright 2018 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -19,7 +21,7 @@ DeterministicAEAD is the interface for deterministic authenticated encryption wi
 
 Warning:
 Unlike AEAD, implementations of this interface are not semantically secure, because
-encrypting the same plaintex always yields the same ciphertext.
+encrypting the same plaintext always yields the same ciphertext.
 
 Security guarantees:
 Implementations of this interface provide 128-bit security level against multi-user attacks

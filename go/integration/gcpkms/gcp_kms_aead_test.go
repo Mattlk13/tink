@@ -1,3 +1,5 @@
+// Copyright 2019 Google LLC
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -18,11 +20,11 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"flag"
 	// context is used to cancel outstanding requests
-	// TEST_SRCDIR to read the roots.pem
 	"github.com/google/tink/go/aead"
 	"github.com/google/tink/go/core/registry"
 	"github.com/google/tink/go/keyset"
@@ -35,28 +37,26 @@ const (
 )
 
 var (
-	// lint placeholder header, please ignore
-	credFile = os.Getenv("TEST_SRCDIR") + "/" + os.Getenv("TEST_WORKSPACE") + "/" + "testdata/credential.json"
-	// lint placeholder footer, please ignore
+	credFile = "tink_base/testdata/credential.json"
 )
 
-// lint placeholder header, please ignore
 func init() {
-	certPath := os.Getenv("TEST_SRCDIR") + "/" + os.Getenv("TEST_WORKSPACE") + "/" + "roots.pem"
+	certPath := filepath.Join(os.Getenv("TEST_SRCDIR"), "tink_base/roots.pem")
 	flag.Set("cacerts", certPath)
 	os.Setenv("SSL_CERT_FILE", certPath)
 }
 
-// lint placeholder footer, please ignore
-
 func setupKMS(t *testing.T) {
 	t.Helper()
-	g, err := NewGCPClient(keyURI)
+
+	srcDir, ok := os.LookupEnv("TEST_SRCDIR")
+	if !ok {
+		t.Skip("TEST_SRCDIR not set")
+	}
+
+	g, err := NewClientWithCredentials(keyURI, filepath.Join(srcDir, credFile))
 	if err != nil {
 		t.Errorf("error setting up gcp client: %v", err)
-	}
-	if _, err = g.LoadCredentials(credFile); err != nil {
-		t.Fatalf("error loading credentials : %v", err)
 	}
 	registry.RegisterKMSClient(g)
 }
@@ -80,7 +80,9 @@ func basicAEADTest(t *testing.T, a tink.AEAD) error {
 	}
 	return nil
 }
-func TestBasicAead(t *testing.T) {
+
+// TODO(b/154273145): re-enable this.
+func testBasicAead(t *testing.T) {
 	setupKMS(t)
 	dek := aead.AES128CTRHMACSHA256KeyTemplate()
 	kh, err := keyset.NewHandle(aead.KMSEnvelopeAEADKeyTemplate(keyURI, dek))

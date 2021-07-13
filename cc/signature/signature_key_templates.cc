@@ -195,11 +195,30 @@ const KeyTemplate& SignatureKeyTemplates::RsaSsaPss4096Sha512Sha512F4() {
 }
 
 // static
+const KeyTemplate& SignatureKeyTemplates::RsaSsaPss4096Sha384Sha384F4() {
+  static const KeyTemplate* key_template =
+      NewRsaSsaPssKeyTemplate(HashType::SHA384, HashType::SHA384, 48, 4096,
+                              RSA_F4)
+          .release();
+  return *key_template;
+}
+
+// static
 const google::crypto::tink::KeyTemplate& SignatureKeyTemplates::Ed25519() {
   static KeyTemplate* key_template = new KeyTemplate();
   key_template->set_type_url(
       absl::StrCat(kTypeGoogleapisCom, Ed25519PrivateKey().GetTypeName()));
   key_template->set_output_prefix_type(OutputPrefixType::TINK);
+  return *key_template;
+}
+
+// static
+const google::crypto::tink::KeyTemplate&
+SignatureKeyTemplates::Ed25519WithRawOutput() {
+  static KeyTemplate* key_template = new KeyTemplate();
+  key_template->set_type_url(
+      absl::StrCat(kTypeGoogleapisCom, Ed25519PrivateKey().GetTypeName()));
+  key_template->set_output_prefix_type(OutputPrefixType::RAW);
   return *key_template;
 }
 

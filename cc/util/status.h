@@ -23,8 +23,7 @@
 #include <string>
 
 #include "absl/base/attributes.h"
-
-// placeholder_forward_declaration, please ignore
+#include "absl/status/status.h"
 
 namespace crypto {
 namespace tink {
@@ -121,6 +120,9 @@ enum Code {
 
   // Unrecoverable data loss or corruption.
   DATA_LOSS = 15,
+
+  // Invalid authentication credentials.
+  UNAUTHENTICATED = 16,
 };
 
 
@@ -132,7 +134,7 @@ enum Code {
 class ABSL_MUST_USE_RESULT Status;
 #endif
 
-// A Status is a combination of an error code and a std::string message (for non-OK
+// A Status is a combination of an error code and a string message (for non-OK
 // error codes).
 class Status {
  public:
@@ -160,9 +162,7 @@ class Status {
   ::crypto::tink::util::error::Code CanonicalCode() const {
     return code_;
   }
-  const std::string& error_message() const {
-    return message_;
-  }
+  const std::string& error_message() const { return message_; }
 
   bool operator==(const Status& x) const;
   bool operator!=(const Status& x) const;
@@ -173,7 +173,8 @@ class Status {
 
   std::string ToString() const;
 
-  // placeholder_implicit_type_conversion, please ignore
+  Status(const ::absl::Status& status);
+  operator ::absl::Status() const;
 
  private:
   ::crypto::tink::util::error::Code code_;

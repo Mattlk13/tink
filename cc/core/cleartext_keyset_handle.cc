@@ -38,7 +38,7 @@ util::StatusOr<std::unique_ptr<KeysetHandle>> CleartextKeysetHandle::Read(
   if (!keyset_result.ok()) {
     return ToStatusF(util::error::INVALID_ARGUMENT,
                      "Error reading keyset data: %s",
-                     keyset_result.status().error_message().c_str());
+                     keyset_result.status().error_message());
   }
   std::unique_ptr<KeysetHandle> handle(
       new KeysetHandle(std::move(keyset_result.ValueOrDie())));
@@ -49,8 +49,8 @@ util::StatusOr<std::unique_ptr<KeysetHandle>> CleartextKeysetHandle::Read(
 crypto::tink::util::Status CleartextKeysetHandle::Write(
     KeysetWriter* writer, const KeysetHandle& keyset_handle) {
   if (!writer) {
-    return ToStatusF(util::error::INVALID_ARGUMENT,
-                     "Error KeysetWriter cannot be null");
+    return util::Status(util::error::INVALID_ARGUMENT,
+                        "Error KeysetWriter cannot be null");
   }
   return writer->Write(keyset_handle.get_keyset());
 }

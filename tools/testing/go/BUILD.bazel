@@ -1,4 +1,4 @@
-package(default_visibility = ["//tools/testing:__subpackages__"])
+package(default_visibility = ["//:__subpackages__"])
 
 licenses(["notice"])
 
@@ -9,13 +9,29 @@ go_binary(
     testonly = 1,  # keep
     srcs = ["aead_cli.go"],
     out = "aead_cli_go",
+    data = [
+        "@tink_base//testdata:credentials",
+    ],
     deps = [
-        "//go/aead:go_default_library",
-        "//go/keyset:go_default_library",
-        "//go/testkeyset:go_default_library",
-        "//go/core/registry:go_default_library",
-        "//go/integration/awskms:go_default_library",
-        "//go/integration/gcpkms:go_default_library",
+        "@tink_go//aead:go_default_library",
+        "@tink_go//core/registry:go_default_library",
+        "@tink_go//integration/awskms:go_default_library",
+        "@tink_go//integration/gcpkms:go_default_library",
+        "@tink_go//keyset:go_default_library",
+        "@tink_go//testkeyset:go_default_library",
+    ],
+)
+
+go_binary(
+    name = "streaming_aead_cli_go",
+    testonly = 1,  # keep
+    srcs = ["streaming_aead_cli.go"],
+    out = "streaming_aead_cli_go",
+    deps = [
+        "@tink_go//core/registry:go_default_library",
+        "@tink_go//keyset:go_default_library",
+        "@tink_go//streamingaead:go_default_library",
+        "@tink_go//testkeyset:go_default_library",
     ],
 )
 
@@ -25,9 +41,21 @@ go_binary(
     srcs = ["mac_cli.go"],
     out = "mac_cli_go",
     deps = [
-        "//go/keyset:go_default_library",
-        "//go/mac:go_default_library",
-        "//go/testkeyset:go_default_library",
+        "@tink_go//keyset:go_default_library",
+        "@tink_go//mac:go_default_library",
+        "@tink_go//testkeyset:go_default_library",
+    ],
+)
+
+go_binary(
+    name = "prf_set_cli_go",
+    testonly = 1,  # keep
+    srcs = ["prf_set_cli.go"],
+    out = "prf_set_cli_go",
+    deps = [
+        "@tink_go//keyset:go_default_library",
+        "@tink_go//prf:go_default_library",
+        "@tink_go//testkeyset:go_default_library",
     ],
 )
 
@@ -37,9 +65,9 @@ go_binary(
     srcs = ["public_key_sign_cli.go"],
     out = "public_key_sign_cli_go",
     deps = [
-        "//go/keyset:go_default_library",
-        "//go/signature:go_default_library",
-        "//go/testkeyset:go_default_library",
+        "@tink_go//keyset:go_default_library",
+        "@tink_go//signature:go_default_library",
+        "@tink_go//testkeyset:go_default_library",
     ],
 )
 
@@ -49,9 +77,9 @@ go_binary(
     srcs = ["public_key_verify_cli.go"],
     out = "public_key_verify_cli_go",
     deps = [
-        "//go/keyset:go_default_library",
-        "//go/signature:go_default_library",
-        "//go/testkeyset:go_default_library",
+        "@tink_go//keyset:go_default_library",
+        "@tink_go//signature:go_default_library",
+        "@tink_go//testkeyset:go_default_library",
     ],
 )
 
@@ -61,9 +89,9 @@ go_binary(
     srcs = ["hybrid_encrypt_cli.go"],
     out = "hybrid_encrypt_cli_go",
     deps = [
-        "//go/keyset:go_default_library",
-        "//go/hybrid:go_default_library",
-        "//go/testkeyset:go_default_library",
+        "@tink_go//hybrid:go_default_library",
+        "@tink_go//keyset:go_default_library",
+        "@tink_go//testkeyset:go_default_library",
     ],
 )
 
@@ -73,9 +101,9 @@ go_binary(
     srcs = ["hybrid_decrypt_cli.go"],
     out = "hybrid_decrypt_cli_go",
     deps = [
-        "//go/keyset:go_default_library",
-        "//go/hybrid:go_default_library",
-        "//go/testkeyset:go_default_library",
+        "@tink_go//hybrid:go_default_library",
+        "@tink_go//keyset:go_default_library",
+        "@tink_go//testkeyset:go_default_library",
     ],
 )
 
@@ -85,9 +113,9 @@ go_binary(
     srcs = ["deterministic_aead_cli.go"],
     out = "deterministic_aead_cli_go",
     deps = [
-        "//go/daead:go_default_library",
-        "//go/keyset:go_default_library",
-        "//go/testkeyset:go_default_library",
+        "@tink_go//daead:go_default_library",
+        "@tink_go//keyset:go_default_library",
+        "@tink_go//testkeyset:go_default_library",
     ],
 )
 
@@ -97,16 +125,16 @@ go_binary(
     srcs = ["generate_envelope_keyset.go"],
     out = "generate_envelope_keyset",
     data = [
-        "//testdata:credentials",
-    ],
-    deps = [
-         "//go/aead:go_default_library",
-         "//go/core/registry:go_default_library",
-         "//go/insecurecleartextkeyset:go_default_library",
-         "//go/integration/awskms:go_default_library",
-         "//go/integration/gcpkms:go_default_library",
-         "//go/keyset:go_default_library",
-         "//proto:tink_go_proto",
+        "@tink_base//testdata:credentials",
     ],
     tags = ["no_rbe"],
+    deps = [
+        "@tink_go//aead:go_default_library",
+        "@tink_go//core/registry:go_default_library",
+        "@tink_go//insecurecleartextkeyset:go_default_library",
+        "@tink_go//integration/awskms:go_default_library",
+        "@tink_go//integration/gcpkms:go_default_library",
+        "@tink_go//keyset:go_default_library",
+        "@tink_go//proto:tink_go_proto",
+    ],
 )
